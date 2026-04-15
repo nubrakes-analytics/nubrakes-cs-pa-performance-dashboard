@@ -225,7 +225,6 @@ tr.dr:hover td{filter:brightness(.985)}
       <select id="marketFilter"><option value="all">All markets</option></select>
     </div>
 
-    <!-- OVERVIEW -->
     <div class="pg on" id="pg-overview">
       <div class="banner">
         <div>
@@ -309,7 +308,6 @@ tr.dr:hover td{filter:brightness(.985)}
       </div>
     </div>
 
-    <!-- CS -->
     <div class="pg" id="pg-CS">
       <div class="topbar">
         <div class="month-wrap">
@@ -359,7 +357,7 @@ tr.dr:hover td{filter:brightness(.985)}
           <div class="ph">
             <div>
               <div class="pt">Issues per job by market</div>
-              <div class="psub">Hotspots by operational burden</div>
+              <div class="psub">Higher values indicate more support issues per completed job · min 20 completed jobs</div>
             </div>
           </div>
           <div class="chart-pad"><div class="chart-box lg" id="issuesByMarketWrap"><canvas id="chartMarket"></canvas></div></div>
@@ -392,7 +390,6 @@ tr.dr:hover td{filter:brightness(.985)}
       </div>
     </div>
 
-    <!-- PA -->
     <div class="pg" id="pg-pa">
       <div class="topbar">
         <div class="month-wrap">
@@ -461,6 +458,7 @@ tr.dr:hover td{filter:brightness(.985)}
 <script>
 const SUPPORT_URL='https://raw.githubusercontent.com/nubrakes-analytics/NuBrakes-Copilot/main/data/fact_nubrakes_front_contact_support_daily.json';
 const PARTS_URL='https://raw.githubusercontent.com/nubrakes-analytics/NuBrakes-Copilot/main/data/fact_nubrakes_reason_parts_daily.json';
+const MIN_MARKET_COMPLETED_JOBS = 20;
 
 const COLORS={
   teal:'#1d9e75',
@@ -514,7 +512,6 @@ const chartDefaults={
 function sw(key, btn){
   document.querySelectorAll('.tabs__btn').forEach(b=>b.classList.remove('is-active'));
   if(btn) btn.classList.add('is-active');
-
   ['overview','CS','pa'].forEach(k=>{
     const el=document.getElementById('pg-'+k);
     if(el) el.classList.toggle('on',k===key);
@@ -552,14 +549,6 @@ function fmtK(n){
 
 function sum(arr,key){
   return arr.reduce((s,r)=>s+(parseFloat(r[key])||0),0);
-}
-
-function groupBy(data,key){
-  return data.reduce((a,r)=>{
-    const k=r[key]||'Unknown';
-    (a[k]||(a[k]=[])).push(r);
-    return a;
-  }, {});
 }
 
 function groupByResolvedKey(data, keys){
@@ -623,41 +612,30 @@ function normalizePartsRow(r){
   };
 }
 
-/*
-  completed_jobs appears repeated across support rows.
-  using MAX by market+day is safer than AVG for repeated-denominator datasets.
-*/
 function dedupCompletedJobs(rows){
   const buckets = {};
-
   rows.forEach(r => {
     const market = r.market || 'Unknown';
     const day = r.Day || r.day || r.date;
     if(!day) return;
-
     const key = `${market}__${day}`;
     const val = parseFloat(r.completed_jobs);
     if(isNaN(val)) return;
-
     buckets[key] = Math.max(buckets[key] || 0, val);
   });
-
   return Object.values(buckets).reduce((total, v) => total + v, 0);
 }
 
 function dedupCompletedJobsByMonth(rows){
   const buckets = {};
-
   rows.forEach(r => {
     const market = r.market || 'Unknown';
     const day = r.Day || r.day || r.date;
     if(!day) return;
-
     const month = String(day).slice(0,7);
     const key = `${month}__${market}__${day}`;
     const val = parseFloat(r.completed_jobs);
     if(isNaN(val)) return;
-
     buckets[key] = { month, value: Math.max(buckets[key]?.value || 0, val) };
   });
 
@@ -665,22 +643,18 @@ function dedupCompletedJobsByMonth(rows){
   Object.values(buckets).forEach(b => {
     monthTotals[b.month] = (monthTotals[b.month] || 0) + b.value;
   });
-
   return monthTotals;
 }
 
 function dedupCompletedJobsByMarket(rows){
   const buckets = {};
-
   rows.forEach(r => {
     const market = r.market || 'Unknown';
     const day = r.Day || r.day || r.date;
     if(!day) return;
-
     const key = `${market}__${day}`;
     const val = parseFloat(r.completed_jobs);
     if(isNaN(val)) return;
-
     buckets[key] = { market, value: Math.max(buckets[key]?.value || 0, val) };
   });
 
@@ -688,7 +662,6 @@ function dedupCompletedJobsByMarket(rows){
   Object.values(buckets).forEach(b => {
     totals[b.market] = (totals[b.market] || 0) + b.value;
   });
-
   return totals;
 }
 
@@ -717,7 +690,6 @@ function filterData(data,market,period){
     const days=period==='last30'?30:90;
     const today=new Date();
     today.setHours(0,0,0,0);
-
     const cutoff=new Date(today);
     cutoff.setDate(cutoff.getDate()-days);
 
@@ -734,7 +706,6 @@ function filterData(data,market,period){
 
 function populateFilters(){
   const markets=new Set();
-
   [...supportData,...partsData].forEach(r=>{
     if(r.market) markets.add(r.market);
   });
@@ -743,7 +714,7 @@ function populateFilters(){
   sel.innerHTML='<option value="all">All markets</option>' + [...markets].sort().map(m=>`<option value="${m}">${m}</option>`).join('');
 }
 
-function refreshMeta(sd,pd){
+function refreshMeta(){
   const lastDay=[...supportData.map(r=>r.Day||r.day||r.date),...partsData.map(r=>r.Day||r.day||r.date)]
     .filter(Boolean)
     .sort()
@@ -769,14 +740,21 @@ function refreshMeta(sd,pd){
   );
 }
 
+function scorecard(label,value,status,badge,accent,primary=false){
+  return `<div class="mc ${primary?'primary':''}" style="--accent:${accent}">
+    <div class="ml">${label}</div>
+    <div class="mv">${value}</div>
+    <div class="ms"><span class="b ${badge}">${status}</span></div>
+  </div>`;
+}
+
 function render(){
   const market=document.getElementById('marketFilter').value;
   const period=document.getElementById('periodFilter').value;
-
   const sd=filterData(supportData,market,period);
   const pd=filterData(partsData,market,period);
 
-  refreshMeta(sd,pd);
+  refreshMeta();
   renderNorthStar(sd);
   renderOverview(sd,pd);
   renderCS(sd);
@@ -816,14 +794,6 @@ function renderOverview(sd,pd){
   renderPartsAccuracyTrend(pd,'chartPartsAccuracy');
   renderOverviewCSTable(sd);
   renderOverviewPaTable(pd);
-}
-
-function scorecard(label,value,status,badge,accent,primary=false){
-  return `<div class="mc ${primary?'primary':''}" style="--accent:${accent}">
-    <div class="ml">${label}</div>
-    <div class="mv">${value}</div>
-    <div class="ms"><span class="b ${badge}">${status}</span></div>
-  </div>`;
 }
 
 function renderCS(sd){
@@ -998,8 +968,15 @@ function renderMarketChart(sd,id){
       const d=grouped[m];
       const issues=sum(d,'total_issues');
       const jobs=completedByMarket[m] || 0;
-      return {m,v:jobs>0?+(issues/jobs).toFixed(3):0};
+      if(jobs < MIN_MARKET_COMPLETED_JOBS) return null;
+      return {
+        m,
+        issues,
+        jobs,
+        v:+(issues/jobs).toFixed(3)
+      };
     })
+    .filter(Boolean)
     .sort((a,b)=>b.v-a.v);
 
   const wrap=document.getElementById('issuesByMarketWrap');
@@ -1007,7 +984,7 @@ function renderMarketChart(sd,id){
 
   if(!rows.length){
     if(charts[id]) charts[id].destroy();
-    if(wrap) wrap.innerHTML='<div class="empty">No market data available.</div>';
+    if(wrap) wrap.innerHTML=`<div class="empty">No market data available after applying minimum volume rule (${MIN_MARKET_COMPLETED_JOBS} completed jobs).</div>`;
     return;
   }
 
@@ -1021,6 +998,9 @@ function renderMarketChart(sd,id){
       labels:rows.map(r=>r.m),
       datasets:[{
         data:rows.map(r=>r.v),
+        rawIssues:rows.map(r=>r.issues),
+        rawJobs:rows.map(r=>r.jobs),
+        rawIssuesPer100:rows.map(r=>+((r.v||0)*100).toFixed(1)),
         backgroundColor:rows.map(r=>r.v>1?COLORS.coral:r.v>.5?COLORS.amber:COLORS.teal),
         borderRadius:6,
         barThickness:16
@@ -1029,6 +1009,24 @@ function renderMarketChart(sd,id){
     options:{
       ...chartDefaults,
       indexAxis:'y',
+      plugins:{
+        ...chartDefaults.plugins,
+        tooltip:{
+          ...chartDefaults.plugins.tooltip,
+          callbacks:{
+            label:(ctx)=>{
+              const ds=ctx.dataset;
+              const i=ctx.dataIndex;
+              return [
+                `Issues / job: ${fmt(ctx.parsed.x,3)}`,
+                `Issues / 100 jobs: ${fmt(ds.rawIssuesPer100[i],1)}`,
+                `Total issues: ${fmtK(ds.rawIssues[i])}`,
+                `Completed jobs: ${fmtK(ds.rawJobs[i])}`
+              ];
+            }
+          }
+        }
+      },
       scales:{
         x:{...chartDefaults.scales.x},
         y:{
@@ -1055,6 +1053,7 @@ function renderMarketTable(sd){
       const r=sum(d,'resolved_issues');
       const rep=sum(d,'repeat_issues');
       const j=completedByMarket[m] || 0;
+      if(j < MIN_MARKET_COMPLETED_JOBS) return null;
       return {
         m,
         total:t,
@@ -1066,6 +1065,7 @@ function renderMarketTable(sd){
         issuesPerJob:j>0?t/j:0
       };
     })
+    .filter(Boolean)
     .sort((a,b)=>b.issuesPerJob-a.issuesPerJob);
 
   const body=document.getElementById('marketTableBody');
@@ -1081,7 +1081,7 @@ function renderMarketTable(sd){
       <td class="tr">${fmtK(r.jobs)}</td>
       <td class="tr"><strong>${fmt(r.issuesPerJob,3)}</strong></td>
     </tr>`;
-  }).join(''):'<tr><td colspan="8" class="empty">No data for selected filters.</td></tr>';
+  }).join(''):`<tr><td colspan="8" class="empty">No data for selected filters after applying minimum volume rule (${MIN_MARKET_COMPLETED_JOBS} completed jobs).</td></tr>`;
 }
 
 function renderOverviewCSTable(sd){
@@ -1094,6 +1094,7 @@ function renderOverviewCSTable(sd){
       const d=grouped[m];
       const t=sum(d,'total_issues');
       const j=completedByMarket[m] || 0;
+      if(j < MIN_MARKET_COMPLETED_JOBS) return null;
       return {
         m,
         total:t,
@@ -1102,6 +1103,7 @@ function renderOverviewCSTable(sd){
         issuesPerJob:j>0?t/j:0
       };
     })
+    .filter(Boolean)
     .sort((a,b)=>b.issuesPerJob-a.issuesPerJob)
     .slice(0,8);
 
