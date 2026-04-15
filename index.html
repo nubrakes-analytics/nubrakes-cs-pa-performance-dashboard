@@ -1028,11 +1028,14 @@ function renderMarketChart(sd,id){
         }
       },
       scales:{
-        x:{...chartDefaults.scales.x},
-        y:{
+        x:{
           ...chartDefaults.scales.y,
+          beginAtZero:true
+        },
+        y:{
+          ...chartDefaults.scales.x,
           ticks:{
-            ...chartDefaults.scales.y.ticks,
+            ...chartDefaults.scales.x.ticks,
             autoSkip:false
           }
         }
