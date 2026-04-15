@@ -504,7 +504,7 @@ const chartDefaults={
 function sw(key, btn){
   document.querySelectorAll('.tabs__btn').forEach(b=>b.classList.remove('is-active'));
   if(btn) btn.classList.add('is-active');
-  ['overview','CS','pa'].forEach(k=>document.getElementById('pg-'+k).classList.toggle('on',k===key));
+  ['overview','osa','pa'].forEach(k=>document.getElementById('pg-'+k).classList.toggle('on',k===key));
 }
 
 function setLoading(msg){document.getElementById('loading-text').textContent=msg}
@@ -590,6 +590,97 @@ function normalizePartsRow(r){
   };
 }
 
+/* ---------------------------
+   UNIQUE / DE-DUPED COMPLETED JOBS
+   completed_jobs is repeated across support rows
+   so we average within market+day, then sum upward
+---------------------------- */
+function dedupCompletedJobs(rows){
+  const buckets = {};
+
+  rows.forEach(r => {
+    const market = r.market || 'Unknown';
+    const day = r.Day || r.day || r.date;
+    if(!day) return;
+
+    const key = `${market}__${day}`;
+    if(!buckets[key]){
+      buckets[key] = { sum: 0, count: 0 };
+    }
+
+    const val = parseFloat(r.completed_jobs);
+    if(!isNaN(val)){
+      buckets[key].sum += val;
+      buckets[key].count += 1;
+    }
+  });
+
+  return Object.values(buckets).reduce((total, b) => {
+    if(!b.count) return total;
+    return total + (b.sum / b.count);
+  }, 0);
+}
+
+function dedupCompletedJobsByMonth(rows){
+  const buckets = {};
+
+  rows.forEach(r => {
+    const market = r.market || 'Unknown';
+    const day = r.Day || r.day || r.date;
+    if(!day) return;
+
+    const month = String(day).slice(0,7);
+    const key = `${month}__${market}__${day}`;
+
+    if(!buckets[key]){
+      buckets[key] = { month, sum: 0, count: 0 };
+    }
+
+    const val = parseFloat(r.completed_jobs);
+    if(!isNaN(val)){
+      buckets[key].sum += val;
+      buckets[key].count += 1;
+    }
+  });
+
+  const monthTotals = {};
+  Object.values(buckets).forEach(b => {
+    const avg = b.count ? (b.sum / b.count) : 0;
+    monthTotals[b.month] = (monthTotals[b.month] || 0) + avg;
+  });
+
+  return monthTotals;
+}
+
+function dedupCompletedJobsByMarket(rows){
+  const buckets = {};
+
+  rows.forEach(r => {
+    const market = r.market || 'Unknown';
+    const day = r.Day || r.day || r.date;
+    if(!day) return;
+
+    const key = `${market}__${day}`;
+    if(!buckets[key]){
+      buckets[key] = { market, sum: 0, count: 0 };
+    }
+
+    const val = parseFloat(r.completed_jobs);
+    if(!isNaN(val)){
+      buckets[key].sum += val;
+      buckets[key].count += 1;
+    }
+  });
+
+  const totals = {};
+  Object.values(buckets).forEach(b => {
+    const avg = b.count ? (b.sum / b.count) : 0;
+    totals[b.market] = (totals[b.market] || 0) + avg;
+  });
+
+  return totals;
+}
+
 function statusMeta(val,target,dir='lower'){
   if(val==null||isNaN(val)) return {badge:'bt',label:'No data',row:''};
   if(dir==='lower'){
@@ -657,12 +748,12 @@ function render(){
   refreshMeta(sd,pd);
   renderNorthStar(sd);
   renderOverview(sd,pd);
-  renderCS(sd);
+  renderOSA(sd);
   renderPA(pd);
 }
 
 function renderNorthStar(sd){
-  const completed=sum(sd,'completed_jobs');
+  const completed=dedupCompletedJobs(sd);
   const repeat=sum(sd,'repeat_issues');
   const rate=completed>0?Math.min(100,(completed/(completed+repeat))*100):null;
   document.getElementById('nsValue').textContent=fmtPct(rate);
@@ -671,7 +762,7 @@ function renderNorthStar(sd){
 
 function renderOverview(sd,pd){
   const totalIssues=sum(sd,'total_issues');
-  const completed=sum(sd,'completed_jobs');
+  const completed=dedupCompletedJobs(sd);
   const issuesPerJob=completed>0?totalIssues/completed:null;
   const resolvedRate=totalIssues>0?(sum(sd,'resolved_issues')/totalIssues)*100:null;
   const repeatRate=totalIssues>0?(sum(sd,'repeat_issues')/totalIssues)*100:null;
@@ -687,7 +778,7 @@ function renderOverview(sd,pd){
 
   renderIssuesTrend(sd,'chartIssuesPerJob');
   renderPartsAccuracyTrend(pd,'chartPartsAccuracy');
-  renderOverviewCSTable(sd);
+  renderOverviewOsaTable(sd);
   renderOverviewPaTable(pd);
 }
 
@@ -699,16 +790,16 @@ function scorecard(label,value,status,badge,accent,primary=false){
   </div>`;
 }
 
-function renderCS(sd){
+function renderOSA(sd){
   const totalIssues=sum(sd,'total_issues');
   const resolved=sum(sd,'resolved_issues');
   const repeat=sum(sd,'repeat_issues');
-  const completed=sum(sd,'completed_jobs');
+  const completed=dedupCompletedJobs(sd);
   const issuesPerJob=completed>0?totalIssues/completed:null;
   const repeatRate=totalIssues>0?(repeat/totalIssues)*100:null;
   const resolvedRate=totalIssues>0?(resolved/totalIssues)*100:null;
 
-  document.getElementById('CS-scorecards').innerHTML=
+  document.getElementById('osa-scorecards').innerHTML=
     scorecard('Issues / completed job', issuesPerJob!=null?fmt(issuesPerJob,3):'—', statusMeta(issuesPerJob,0.5,'lower').label, statusMeta(issuesPerJob,0.5,'lower').badge, COLORS.teal, true)+
     scorecard('Repeat issue rate', fmtPct(repeatRate), statusMeta(repeatRate,15,'lower').label, statusMeta(repeatRate,15,'lower').badge, COLORS.amber)+
     scorecard('Resolved rate', fmtPct(resolvedRate), statusMeta(resolvedRate,85,'higher').label, statusMeta(resolvedRate,85,'higher').badge, COLORS.blue)+
@@ -741,6 +832,7 @@ function renderPA(pd){
 
 function renderIssuesTrend(sd,id){
   const byMonth=groupByMonth(sd,'Day');
+  const completedByMonth=dedupCompletedJobsByMonth(sd);
   const months=Object.keys(byMonth).sort();
 
   makeChart(id,{
@@ -750,9 +842,9 @@ function renderIssuesTrend(sd,id){
       datasets:[{
         data:months.map(m=>{
           const rows=byMonth[m];
-          const i=sum(rows,'total_issues');
-          const j=sum(rows,'completed_jobs');
-          return j>0?+(i/j).toFixed(3):0;
+          const issues=sum(rows,'total_issues');
+          const jobs=completedByMonth[m] || 0;
+          return jobs>0 ? +(issues/jobs).toFixed(3) : 0;
         }),
         borderColor:COLORS.teal,
         backgroundColor:COLORS.tealA,
@@ -862,13 +954,15 @@ function renderIssueType(sd,id){
 
 function renderMarketChart(sd,id){
   const grouped=groupByResolvedKey(sd,['market','Market']);
+  const completedByMarket=dedupCompletedJobsByMarket(sd);
+
   const rows=Object.keys(grouped)
     .filter(k=>k && k!=='Unknown' && k!=='null')
     .map(m=>{
       const d=grouped[m];
-      const i=sum(d,'total_issues');
-      const j=sum(d,'completed_jobs');
-      return {m,v:j>0?+(i/j).toFixed(3):0};
+      const issues=sum(d,'total_issues');
+      const jobs=completedByMarket[m] || 0;
+      return {m,v:jobs>0?+(issues/jobs).toFixed(3):0};
     })
     .sort((a,b)=>b.v-a.v);
 
@@ -915,6 +1009,8 @@ function renderMarketChart(sd,id){
 
 function renderMarketTable(sd){
   const grouped=groupByResolvedKey(sd,['market','Market']);
+  const completedByMarket=dedupCompletedJobsByMarket(sd);
+
   const rows=Object.keys(grouped)
     .filter(k=>k && k!=='Unknown' && k!=='null')
     .map(m=>{
@@ -922,7 +1018,7 @@ function renderMarketTable(sd){
       const t=sum(d,'total_issues');
       const r=sum(d,'resolved_issues');
       const rep=sum(d,'repeat_issues');
-      const j=sum(d,'completed_jobs');
+      const j=completedByMarket[m] || 0;
       return {
         m,
         total:t,
@@ -952,14 +1048,16 @@ function renderMarketTable(sd){
   }).join(''):'<tr><td colspan="8" class="empty">No data for selected filters.</td></tr>';
 }
 
-function renderOverviewCSTable(sd){
+function renderOverviewOsaTable(sd){
   const grouped=groupByResolvedKey(sd,['market','Market']);
+  const completedByMarket=dedupCompletedJobsByMarket(sd);
+
   const rows=Object.keys(grouped)
     .filter(k=>k && k!=='Unknown' && k!=='null')
     .map(m=>{
       const d=grouped[m];
       const t=sum(d,'total_issues');
-      const j=sum(d,'completed_jobs');
+      const j=completedByMarket[m] || 0;
       return {
         m,
         total:t,
@@ -971,7 +1069,7 @@ function renderOverviewCSTable(sd){
     .sort((a,b)=>b.issuesPerJob-a.issuesPerJob)
     .slice(0,8);
 
-  document.getElementById('overviewCSTable').innerHTML=rows.length?rows.map(r=>`
+  document.getElementById('overviewOsaTable').innerHTML=rows.length?rows.map(r=>`
     <tr class="dr ${statusMeta(r.issuesPerJob,0.5,'lower').row}">
       <td>${r.m}</td>
       <td class="tr">${fmtK(r.total)}</td>
