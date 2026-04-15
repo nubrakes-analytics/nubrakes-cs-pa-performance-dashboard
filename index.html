@@ -246,7 +246,7 @@ tr.dr:hover td{filter:brightness(.985)}
     <div class="ph">
       <div>
         <div class="pt">Top disruption reasons</div>
-        <div class="psub">Highest disruption counts from cancellation reason mapping</div>
+        <div class="psub">HQ-driven reasons ranked by total jobs</div>
       </div>
     </div>
     <div class="chart-pad">
@@ -260,7 +260,7 @@ tr.dr:hover td{filter:brightness(.985)}
     <div class="ph">
       <div>
         <div class="pt">Top impacted markets</div>
-        <div class="psub">Markets with the highest disruption counts</div>
+        <div class="psub">Markets ranked by HQ-driven total jobs</div>
       </div>
     </div>
     <div class="chart-pad">
@@ -654,6 +654,39 @@ function getFirstValue(obj, keys){
   return null;
 }
 
+  function mapDisruptionSegment(reason){
+  const HQ_DRIVEN = new Set([
+    'HQ: Technician availability',
+    'HQ: Part availability',
+    'HQ: Did not arrive within the service window',
+    'HQ: Weather',
+    'HQ: Drive time too long',
+    'HQ: Technician could not complete service',
+    'HQ: Duplicate Job Booked',
+    'HQ: Overbooked Time Slot',
+    'HQ: Schedule Optimization (Unserved)',
+    'HQ: Incorrect parts'
+  ]);
+
+  const CUSTOMER_DRIVEN = new Set([
+    'Customer: Rebooked for another time',
+    'Customer: Schedule conflict',
+    'Customer: Decided on alternative option',
+    'Customer: Did not provide reason',
+    'Customer: Price too high',
+    'Customer: No show or no response',
+    'Customer: Could not access vehicle',
+    'Customer: Did not provide VIN or LP',
+    'Customer: Not available during service window',
+    'Customer: Refuses to pay'
+  ]);
+
+  if (HQ_DRIVEN.has(reason)) return 'HQ Driven';
+  if (CUSTOMER_DRIVEN.has(reason)) return 'Customer Driven';
+  if (reason === 'HQ: Margin Alert') return 'Review / Other';
+  return 'Review / Other';
+}
+
 function normalizeSupportRow(r){
   return {
     ...r,
@@ -873,14 +906,17 @@ function renderTopDisruptionReasons(pd,id){
     .filter(k=>k && k!=='Unknown' && k!=='null')
     .map(reason=>{
       const d=grouped[reason];
+      const totalJobs=sum(d,'total_jobs');
+      const disruptions=sum(d,'jobs_with_issue');
       return {
         label: reason,
-        disruptions: sum(d,'jobs_with_issue'),
-        totalJobs: sum(d,'total_jobs')
+        segment: mapDisruptionSegment(reason),
+        totalJobs,
+        disruptions
       };
     })
-    .filter(r=>r.disruptions > 0)
-    .sort((a,b)=>b.disruptions-a.disruptions)
+    .filter(r=>r.segment==='HQ Driven' && r.totalJobs > 0)
+    .sort((a,b)=>b.totalJobs-a.totalJobs)
     .slice(0,8);
 
   const wrap=document.getElementById('overviewReasonWrap');
@@ -888,7 +924,7 @@ function renderTopDisruptionReasons(pd,id){
 
   if(!rows.length){
     if(charts[id]) charts[id].destroy();
-    if(wrap) wrap.innerHTML='<div class="empty">No disruption reason data available.</div>';
+    if(wrap) wrap.innerHTML='<div class="empty">No HQ-driven disruption reason data available.</div>';
     return;
   }
 
@@ -901,9 +937,10 @@ function renderTopDisruptionReasons(pd,id){
     data:{
       labels:rows.map(r=>r.label.length>30 ? r.label.slice(0,30)+'…' : r.label),
       datasets:[{
-        data:rows.map(r=>r.disruptions),
+        data:rows.map(r=>r.totalJobs),
         rawLabel:rows.map(r=>r.label),
         rawJobs:rows.map(r=>r.totalJobs),
+        rawDisruptions:rows.map(r=>r.disruptions),
         backgroundColor:rows.map((_,i)=> i===0 ? COLORS.coral : COLORS.amber),
         borderRadius:6,
         barThickness:16
@@ -931,8 +968,9 @@ function renderTopDisruptionReasons(pd,id){
               const ds=ctx.dataset;
               const i=ctx.dataIndex;
               return [
-                `Disruptions: ${fmtK(ctx.parsed.x)}`,
-                `Total jobs: ${fmtK(ds.rawJobs[i])}`
+                `Total jobs: ${fmtK(ctx.parsed.x)}`,
+                `Jobs with issue: ${fmtK(ds.rawDisruptions[i])}`,
+                `Segment: HQ Driven`
               ];
             }
           }
@@ -961,7 +999,9 @@ function renderTopDisruptionReasons(pd,id){
 }
 
 function renderTopImpactedMarkets(pd,id){
-  const grouped=groupByResolvedKey(pd,['market','Market']);
+  const hqRows = pd.filter(r => mapDisruptionSegment(r.cancellation_reason) === 'HQ Driven');
+
+  const grouped=groupByResolvedKey(hqRows,['market','Market']);
 
   const rows=Object.keys(grouped)
     .filter(k=>k && k!=='Unknown' && k!=='null')
@@ -969,12 +1009,12 @@ function renderTopImpactedMarkets(pd,id){
       const d=grouped[market];
       return {
         label: market,
-        disruptions: sum(d,'jobs_with_issue'),
-        totalJobs: sum(d,'total_jobs')
+        totalJobs: sum(d,'total_jobs'),
+        disruptions: sum(d,'jobs_with_issue')
       };
     })
-    .filter(r=>r.disruptions > 0)
-    .sort((a,b)=>b.disruptions-a.disruptions)
+    .filter(r=>r.totalJobs > 0)
+    .sort((a,b)=>b.totalJobs-a.totalJobs)
     .slice(0,8);
 
   const wrap=document.getElementById('overviewMarketWrap');
@@ -982,7 +1022,7 @@ function renderTopImpactedMarkets(pd,id){
 
   if(!rows.length){
     if(charts[id]) charts[id].destroy();
-    if(wrap) wrap.innerHTML='<div class="empty">No market disruption data available.</div>';
+    if(wrap) wrap.innerHTML='<div class="empty">No HQ-driven market data available.</div>';
     return;
   }
 
@@ -995,9 +1035,10 @@ function renderTopImpactedMarkets(pd,id){
     data:{
       labels:rows.map(r=>r.label),
       datasets:[{
-        data:rows.map(r=>r.disruptions),
+        data:rows.map(r=>r.totalJobs),
         rawLabel:rows.map(r=>r.label),
         rawJobs:rows.map(r=>r.totalJobs),
+        rawDisruptions:rows.map(r=>r.disruptions),
         backgroundColor:rows.map((_,i)=> i===0 ? COLORS.blue : COLORS.purple),
         borderRadius:6,
         barThickness:16
@@ -1025,8 +1066,9 @@ function renderTopImpactedMarkets(pd,id){
               const ds=ctx.dataset;
               const i=ctx.dataIndex;
               return [
-                `Disruptions: ${fmtK(ctx.parsed.x)}`,
-                `Total jobs: ${fmtK(ds.rawJobs[i])}`
+                `Total jobs: ${fmtK(ctx.parsed.x)}`,
+                `Jobs with issue: ${fmtK(ds.rawDisruptions[i])}`,
+                `Segment: HQ Driven`
               ];
             }
           }
