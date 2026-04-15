@@ -241,6 +241,36 @@ tr.dr:hover td{filter:brightness(.985)}
       <div class="slbl">Month summary</div>
       <div class="mrow" id="overview-scorecards"></div>
 
+<div class="two-col">
+  <div class="panel">
+    <div class="ph">
+      <div>
+        <div class="pt">Top disruption reasons</div>
+        <div class="psub">Highest disruption counts from cancellation reason mapping</div>
+      </div>
+    </div>
+    <div class="chart-pad">
+      <div class="chart-box lg" id="overviewReasonWrap">
+        <canvas id="chartTopDisruptionReasons"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ph">
+      <div>
+        <div class="pt">Top impacted markets</div>
+        <div class="psub">Markets with the highest disruption counts</div>
+      </div>
+    </div>
+    <div class="chart-pad">
+      <div class="chart-box lg" id="overviewMarketWrap">
+        <canvas id="chartTopImpactedMarkets"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+      
       <div class="two-col">
         <div class="panel">
           <div class="ph">
@@ -480,6 +510,44 @@ const COLORS={
 let supportData=[];
 let partsData=[];
 let charts={};
+
+const valueLabelPlugin = {
+  id: 'valueLabelPlugin',
+  afterDatasetsDraw(chart, args, pluginOptions) {
+    const { ctx } = chart;
+    const suffix = pluginOptions?.suffix || '';
+    const color = pluginOptions?.color || '#374151';
+    const font = pluginOptions?.font || "11px 'DM Mono', monospace";
+    const formatter = pluginOptions?.formatter || ((v) => v);
+
+    ctx.save();
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'middle';
+
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+
+      meta.data.forEach((bar, index) => {
+        const raw = dataset.data[index];
+        if (raw == null || isNaN(raw)) return;
+
+        const text = formatter(raw) + suffix;
+
+        if (chart.config.type === 'bar' && chart.options.indexAxis === 'y') {
+          ctx.textAlign = 'left';
+          ctx.fillText(text, bar.x + 8, bar.y);
+        } else if (chart.config.type === 'bar') {
+          ctx.textAlign = 'center';
+          ctx.fillText(text, bar.x, bar.y - 10);
+        }
+      });
+    });
+
+    ctx.restore();
+  }
+};
 
 const chartDefaults={
   responsive:true,
@@ -794,8 +862,198 @@ function renderOverview(sd,pd){
   renderPartsAccuracyTrend(pd,'chartPartsAccuracy');
   renderOverviewCSTable(sd);
   renderOverviewPaTable(pd);
+  renderTopDisruptionReasons(pd,'chartTopDisruptionReasons');
+  renderTopImpactedMarkets(pd,'chartTopImpactedMarkets');
 }
 
+function renderTopDisruptionReasons(pd,id){
+  const grouped=groupByResolvedKey(pd,['cancellation_reason','cancellationReason']);
+
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(reason=>{
+      const d=grouped[reason];
+      return {
+        label: reason,
+        disruptions: sum(d,'jobs_with_issue'),
+        totalJobs: sum(d,'total_jobs')
+      };
+    })
+    .filter(r=>r.disruptions > 0)
+    .sort((a,b)=>b.disruptions-a.disruptions)
+    .slice(0,8);
+
+  const wrap=document.getElementById('overviewReasonWrap');
+  if(wrap) wrap.style.height=Math.max(280, rows.length*30+60)+'px';
+
+  if(!rows.length){
+    if(charts[id]) charts[id].destroy();
+    if(wrap) wrap.innerHTML='<div class="empty">No disruption reason data available.</div>';
+    return;
+  }
+
+  if(wrap && !document.getElementById(id)){
+    wrap.innerHTML='<canvas id="chartTopDisruptionReasons"></canvas>';
+  }
+
+  makeChart(id,{
+    type:'bar',
+    data:{
+      labels:rows.map(r=>r.label.length>30 ? r.label.slice(0,30)+'…' : r.label),
+      datasets:[{
+        data:rows.map(r=>r.disruptions),
+        rawLabel:rows.map(r=>r.label),
+        rawJobs:rows.map(r=>r.totalJobs),
+        backgroundColor:rows.map((_,i)=> i===0 ? COLORS.coral : COLORS.amber),
+        borderRadius:6,
+        barThickness:16
+      }]
+    },
+    plugins:[valueLabelPlugin],
+    options:{
+      ...chartDefaults,
+      indexAxis:'y',
+      layout:{ padding:{ right:48 } },
+      plugins:{
+        ...chartDefaults.plugins,
+        valueLabelPlugin:{
+          color:'#374151',
+          formatter:(v)=>fmtK(v)
+        },
+        tooltip:{
+          ...chartDefaults.plugins.tooltip,
+          callbacks:{
+            title:(items)=>{
+              const i=items[0]?.dataIndex ?? 0;
+              return rows[i]?.label || '';
+            },
+            label:(ctx)=>{
+              const ds=ctx.dataset;
+              const i=ctx.dataIndex;
+              return [
+                `Disruptions: ${fmtK(ctx.parsed.x)}`,
+                `Total jobs: ${fmtK(ds.rawJobs[i])}`
+              ];
+            }
+          }
+        }
+      },
+      scales:{
+        x:{
+          ...chartDefaults.scales.y,
+          beginAtZero:true,
+          grace:'10%',
+          ticks:{
+            ...chartDefaults.scales.y.ticks,
+            callback:v=>fmtK(v)
+          }
+        },
+        y:{
+          ...chartDefaults.scales.x,
+          ticks:{
+            ...chartDefaults.scales.x.ticks,
+            autoSkip:false
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderTopImpactedMarkets(pd,id){
+  const grouped=groupByResolvedKey(pd,['market','Market']);
+
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(market=>{
+      const d=grouped[market];
+      return {
+        label: market,
+        disruptions: sum(d,'jobs_with_issue'),
+        totalJobs: sum(d,'total_jobs')
+      };
+    })
+    .filter(r=>r.disruptions > 0)
+    .sort((a,b)=>b.disruptions-a.disruptions)
+    .slice(0,8);
+
+  const wrap=document.getElementById('overviewMarketWrap');
+  if(wrap) wrap.style.height=Math.max(280, rows.length*30+60)+'px';
+
+  if(!rows.length){
+    if(charts[id]) charts[id].destroy();
+    if(wrap) wrap.innerHTML='<div class="empty">No market disruption data available.</div>';
+    return;
+  }
+
+  if(wrap && !document.getElementById(id)){
+    wrap.innerHTML='<canvas id="chartTopImpactedMarkets"></canvas>';
+  }
+
+  makeChart(id,{
+    type:'bar',
+    data:{
+      labels:rows.map(r=>r.label),
+      datasets:[{
+        data:rows.map(r=>r.disruptions),
+        rawLabel:rows.map(r=>r.label),
+        rawJobs:rows.map(r=>r.totalJobs),
+        backgroundColor:rows.map((_,i)=> i===0 ? COLORS.blue : COLORS.purple),
+        borderRadius:6,
+        barThickness:16
+      }]
+    },
+    plugins:[valueLabelPlugin],
+    options:{
+      ...chartDefaults,
+      indexAxis:'y',
+      layout:{ padding:{ right:48 } },
+      plugins:{
+        ...chartDefaults.plugins,
+        valueLabelPlugin:{
+          color:'#374151',
+          formatter:(v)=>fmtK(v)
+        },
+        tooltip:{
+          ...chartDefaults.plugins.tooltip,
+          callbacks:{
+            title:(items)=>{
+              const i=items[0]?.dataIndex ?? 0;
+              return rows[i]?.label || '';
+            },
+            label:(ctx)=>{
+              const ds=ctx.dataset;
+              const i=ctx.dataIndex;
+              return [
+                `Disruptions: ${fmtK(ctx.parsed.x)}`,
+                `Total jobs: ${fmtK(ds.rawJobs[i])}`
+              ];
+            }
+          }
+        }
+      },
+      scales:{
+        x:{
+          ...chartDefaults.scales.y,
+          beginAtZero:true,
+          grace:'10%',
+          ticks:{
+            ...chartDefaults.scales.y.ticks,
+            callback:v=>fmtK(v)
+          }
+        },
+        y:{
+          ...chartDefaults.scales.x,
+          ticks:{
+            ...chartDefaults.scales.x.ticks,
+            autoSkip:false
+          }
+        }
+      }
+    }
+  });
+}
+  
 function renderCS(sd){
   const totalIssues=sum(sd,'total_issues');
   const resolved=sum(sd,'resolved_issues');
@@ -1216,11 +1474,20 @@ function renderPartsReason(pd,id){
         barThickness:16
       }]
     },
+    plugins:[valueLabelPlugin],
     options:{
       ...chartDefaults,
       indexAxis:'y',
+      layout:{
+        padding:{right:52}
+      },
       plugins:{
         ...chartDefaults.plugins,
+        valueLabelPlugin:{
+          suffix:'%',
+          color:'#374151',
+          formatter:(v)=>Number(v).toFixed(1)
+        },
         tooltip:{
           ...chartDefaults.plugins.tooltip,
           callbacks:{
@@ -1244,6 +1511,7 @@ function renderPartsReason(pd,id){
         x:{
           ...chartDefaults.scales.y,
           beginAtZero:true,
+          grace:'12%',
           ticks:{
             ...chartDefaults.scales.y.ticks,
             callback:v=>v+'%'
@@ -1260,6 +1528,7 @@ function renderPartsReason(pd,id){
     }
   });
 }
+
 function renderSupplierTable(pd){
   const grouped=groupByResolvedKey(pd,['supplier','Supplier']);
   const rows=Object.keys(grouped)
