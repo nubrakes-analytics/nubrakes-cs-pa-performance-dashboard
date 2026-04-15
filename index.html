@@ -266,14 +266,14 @@ tr.dr:hover td{filter:brightness(.985)}
               <tr>
                 <th>Market</th>
                 <th class="tr">Issues</th>
+                <th class="tr">Resolved %</th>
                 <th class="tr">Repeat %</th>
-                <th class="tr">FCR %</th>
                 <th class="tr">Issues / Job</th>
               </tr>
             </thead>
             <tbody id="overviewOsaTable"></tbody>
           </table>
-          <div class="foot">OSA view highlights ticket burden and quality of resolution by market.</div>
+          <div class="foot">OSA view highlights ticket burden and resolution quality by market.</div>
         </div>
         <div class="panel">
           <div class="ph">
@@ -323,15 +323,15 @@ tr.dr:hover td{filter:brightness(.985)}
         <div class="panel">
           <div class="ph">
             <div>
-              <div class="pt">FCR rate vs repeat issue rate</div>
-              <div class="psub">FCR target &gt;80% · Repeat target &lt;15%</div>
+              <div class="pt">Resolved rate vs repeat issue rate</div>
+              <div class="psub">Resolved target high · Repeat target &lt;15%</div>
             </div>
           </div>
           <div class="legend">
-            <div class="leg-item"><div class="leg-dot" style="background:#378add"></div>FCR rate</div>
+            <div class="leg-item"><div class="leg-dot" style="background:#378add"></div>Resolved rate</div>
             <div class="leg-item"><div class="leg-dot" style="background:#ef9f27"></div>Repeat rate</div>
           </div>
-          <div class="chart-pad"><div class="chart-box"><canvas id="chartFcrRepeat"></canvas></div></div>
+          <div class="chart-pad"><div class="chart-box"><canvas id="chartResolvedRepeat"></canvas></div></div>
         </div>
       </div>
 
@@ -369,10 +369,9 @@ tr.dr:hover td{filter:brightness(.985)}
               <th>Market</th>
               <th class="tr">Total issues</th>
               <th class="tr">Resolved</th>
+              <th class="tr">Resolved %</th>
               <th class="tr">Repeat issues</th>
               <th class="tr">Repeat %</th>
-              <th class="tr">FCR issues</th>
-              <th class="tr">FCR %</th>
               <th class="tr">Completed jobs</th>
               <th class="tr">Issues / Job</th>
             </tr>
@@ -559,7 +558,7 @@ function renderOverview(sd,pd){
   const totalIssues=sum(sd,'total_issues');
   const completed=sum(sd,'completed_jobs');
   const issuesPerJob=completed>0?totalIssues/completed:null;
-  const fcrRate=totalIssues>0?(sum(sd,'fcr_issues')/totalIssues)*100:null;
+  const resolvedRate=totalIssues>0?(sum(sd,'resolved_issues')/totalIssues)*100:null;
   const repeatRate=totalIssues>0?(sum(sd,'repeat_issues')/totalIssues)*100:null;
   const totalJobs=sum(pd,'total_jobs');
   const jobsWithIssue=sum(pd,'jobs_with_issue');
@@ -568,7 +567,7 @@ function renderOverview(sd,pd){
   document.getElementById('overview-scorecards').innerHTML=
     scorecard('CS issues / job', issuesPerJob!=null?fmt(issuesPerJob,3):'—', statusMeta(issuesPerJob,0.5,'lower').label, statusMeta(issuesPerJob,0.5,'lower').badge, COLORS.teal, true) +
     scorecard('Repeat issue rate', fmtPct(repeatRate), statusMeta(repeatRate,15,'lower').label, statusMeta(repeatRate,15,'lower').badge, COLORS.amber) +
-    scorecard('FCR rate', fmtPct(fcrRate), statusMeta(fcrRate,80,'higher').label, statusMeta(fcrRate,80,'higher').badge, COLORS.blue) +
+    scorecard('Resolved rate', fmtPct(resolvedRate), statusMeta(resolvedRate,85,'higher').label, statusMeta(resolvedRate,85,'higher').badge, COLORS.blue) +
     scorecard('Parts accuracy', fmtPct(partsAccuracy), statusMeta(partsAccuracy,95,'higher').label, statusMeta(partsAccuracy,95,'higher').badge, COLORS.purple);
 
   renderIssuesTrend(sd,'chartIssuesPerJob');
@@ -585,21 +584,19 @@ function renderOSA(sd){
   const totalIssues=sum(sd,'total_issues');
   const resolved=sum(sd,'resolved_issues');
   const repeat=sum(sd,'repeat_issues');
-  const fcr=sum(sd,'fcr_issues');
   const completed=sum(sd,'completed_jobs');
   const issuesPerJob=completed>0?totalIssues/completed:null;
   const repeatRate=totalIssues>0?(repeat/totalIssues)*100:null;
-  const fcrRate=totalIssues>0?(fcr/totalIssues)*100:null;
   const resolvedRate=totalIssues>0?(resolved/totalIssues)*100:null;
 
   document.getElementById('osa-scorecards').innerHTML=
     scorecard('Issues / completed job', issuesPerJob!=null?fmt(issuesPerJob,3):'—', statusMeta(issuesPerJob,0.5,'lower').label, statusMeta(issuesPerJob,0.5,'lower').badge, COLORS.teal, true)+
     scorecard('Repeat issue rate', fmtPct(repeatRate), statusMeta(repeatRate,15,'lower').label, statusMeta(repeatRate,15,'lower').badge, COLORS.amber)+
-    scorecard('FCR rate', fmtPct(fcrRate), statusMeta(fcrRate,80,'higher').label, statusMeta(fcrRate,80,'higher').badge, COLORS.blue)+
-    scorecard('Resolved issues', `${fmtK(resolved)}${resolvedRate!=null?` · ${fmtPct(resolvedRate)}`:''}`, 'Share of all issues', 'bt', COLORS.purple);
+    scorecard('Resolved rate', fmtPct(resolvedRate), statusMeta(resolvedRate,85,'higher').label, statusMeta(resolvedRate,85,'higher').badge, COLORS.blue)+
+    scorecard('Resolved issues', fmtK(resolved), 'Issue closure volume', 'bt', COLORS.purple);
 
   renderIssuesTrend(sd,'chartIssuesPerJob2');
-  renderFcrRepeat(sd,'chartFcrRepeat');
+  renderResolvedRepeat(sd,'chartResolvedRepeat');
   renderIssueType(sd,'chartIssueType');
   renderMarketChart(sd,'chartMarket');
   renderMarketTable(sd);
@@ -629,11 +626,11 @@ function renderIssuesTrend(sd,id){
   makeChart(id,{type:'line',data:{labels:months,datasets:[{data:months.map(m=>{const rows=byMonth[m]; const i=sum(rows,'total_issues'); const j=sum(rows,'completed_jobs'); return j>0?+(i/j).toFixed(3):0}),borderColor:COLORS.teal,backgroundColor:COLORS.tealA,fill:true,tension:.35,borderWidth:2,pointRadius:3}]},options:chartDefaults});
 }
 
-function renderFcrRepeat(sd,id){
+function renderResolvedRepeat(sd,id){
   const byMonth=groupByMonth(sd,'Day');
   const months=Object.keys(byMonth).sort();
   makeChart(id,{type:'line',data:{labels:months,datasets:[
-    {label:'FCR',data:months.map(m=>{const rows=byMonth[m]; const t=sum(rows,'total_issues'); return t>0?+((sum(rows,'fcr_issues')/t)*100).toFixed(1):0}),borderColor:COLORS.blue,backgroundColor:COLORS.blueA,fill:false,tension:.35,borderWidth:2,pointRadius:3},
+    {label:'Resolved',data:months.map(m=>{const rows=byMonth[m]; const t=sum(rows,'total_issues'); return t>0?+((sum(rows,'resolved_issues')/t)*100).toFixed(1):0}),borderColor:COLORS.blue,backgroundColor:COLORS.blueA,fill:false,tension:.35,borderWidth:2,pointRadius:3},
     {label:'Repeat',data:months.map(m=>{const rows=byMonth[m]; const t=sum(rows,'total_issues'); return t>0?+((sum(rows,'repeat_issues')/t)*100).toFixed(1):0}),borderColor:COLORS.amber,backgroundColor:COLORS.amberA,fill:false,tension:.35,borderWidth:2,pointRadius:3,borderDash:[5,4]}
   ]},options:{...chartDefaults,scales:{...chartDefaults.scales,y:{...chartDefaults.scales.y,max:100,ticks:{...chartDefaults.scales.y.ticks,callback:v=>v+'%'}}}}});
 }
@@ -654,15 +651,64 @@ function renderMarketChart(sd,id){
 
 function renderMarketTable(sd){
   const grouped=groupBy(sd,'market');
-  const rows=Object.keys(grouped).filter(k=>k && k!=='Unknown').map(m=>{const d=grouped[m]; const t=sum(d,'total_issues'); const r=sum(d,'resolved_issues'); const rep=sum(d,'repeat_issues'); const f=sum(d,'fcr_issues'); const j=sum(d,'completed_jobs'); return {m,total:t,resolved:r,repeat:rep,repeatRate:t>0?(rep/t)*100:0,fcr:f,fcrRate:t>0?(f/t)*100:0,jobs:j,issuesPerJob:j>0?t/j:0};}).sort((a,b)=>b.issuesPerJob-a.issuesPerJob);
+  const rows=Object.keys(grouped).filter(k=>k && k!=='Unknown').map(m=>{
+    const d=grouped[m];
+    const t=sum(d,'total_issues');
+    const r=sum(d,'resolved_issues');
+    const rep=sum(d,'repeat_issues');
+    const j=sum(d,'completed_jobs');
+    return {
+      m,
+      total:t,
+      resolved:r,
+      resolvedRate:t>0?(r/t)*100:0,
+      repeat:rep,
+      repeatRate:t>0?(rep/t)*100:0,
+      jobs:j,
+      issuesPerJob:j>0?t/j:0
+    };
+  }).sort((a,b)=>b.issuesPerJob-a.issuesPerJob);
+
   const body=document.getElementById('marketTableBody');
-  body.innerHTML=rows.length?rows.map(r=>{const row=statusMeta(r.issuesPerJob,0.5,'lower').row; return `<tr class="dr ${row}"><td>${r.m}</td><td class="tr">${fmtK(r.total)}</td><td class="tr">${fmtK(r.resolved)}</td><td class="tr">${fmtK(r.repeat)}</td><td class="tr"><span class="b ${statusMeta(r.repeatRate,15,'lower').badge}">${fmtPct(r.repeatRate)}</span></td><td class="tr">${fmtK(r.fcr)}</td><td class="tr"><span class="b ${statusMeta(r.fcrRate,80,'higher').badge}">${fmtPct(r.fcrRate)}</span></td><td class="tr">${fmtK(r.jobs)}</td><td class="tr"><strong>${fmt(r.issuesPerJob,3)}</strong></td></tr>`}).join(''):'<tr><td colspan="9" class="empty">No data for selected filters.</td></tr>';
+  body.innerHTML=rows.length?rows.map(r=>{
+    const row=statusMeta(r.issuesPerJob,0.5,'lower').row;
+    return `<tr class="dr ${row}">
+      <td>${r.m}</td>
+      <td class="tr">${fmtK(r.total)}</td>
+      <td class="tr">${fmtK(r.resolved)}</td>
+      <td class="tr"><span class="b ${statusMeta(r.resolvedRate,85,'higher').badge}">${fmtPct(r.resolvedRate)}</span></td>
+      <td class="tr">${fmtK(r.repeat)}</td>
+      <td class="tr"><span class="b ${statusMeta(r.repeatRate,15,'lower').badge}">${fmtPct(r.repeatRate)}</span></td>
+      <td class="tr">${fmtK(r.jobs)}</td>
+      <td class="tr"><strong>${fmt(r.issuesPerJob,3)}</strong></td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="8" class="empty">No data for selected filters.</td></tr>';
 }
 
 function renderOverviewOsaTable(sd){
   const grouped=groupBy(sd,'market');
-  const rows=Object.keys(grouped).filter(Boolean).map(m=>{const d=grouped[m]; const t=sum(d,'total_issues'); const j=sum(d,'completed_jobs'); return {m,total:t,repeatRate:t>0?(sum(d,'repeat_issues')/t)*100:0,fcrRate:t>0?(sum(d,'fcr_issues')/t)*100:0,issuesPerJob:j>0?t/j:0};}).sort((a,b)=>b.issuesPerJob-a.issuesPerJob).slice(0,8);
-  document.getElementById('overviewOsaTable').innerHTML=rows.length?rows.map(r=>`<tr class="dr ${statusMeta(r.issuesPerJob,0.5,'lower').row}"><td>${r.m}</td><td class="tr">${fmtK(r.total)}</td><td class="tr"><span class="b ${statusMeta(r.repeatRate,15,'lower').badge}">${fmtPct(r.repeatRate)}</span></td><td class="tr"><span class="b ${statusMeta(r.fcrRate,80,'higher').badge}">${fmtPct(r.fcrRate)}</span></td><td class="tr"><strong>${fmt(r.issuesPerJob,3)}</strong></td></tr>`).join(''):'<tr><td colspan="5" class="empty">No data.</td></tr>';
+  const rows=Object.keys(grouped).filter(Boolean).map(m=>{
+    const d=grouped[m];
+    const t=sum(d,'total_issues');
+    const j=sum(d,'completed_jobs');
+    return {
+      m,
+      total:t,
+      resolvedRate:t>0?(sum(d,'resolved_issues')/t)*100:0,
+      repeatRate:t>0?(sum(d,'repeat_issues')/t)*100:0,
+      issuesPerJob:j>0?t/j:0
+    };
+  }).sort((a,b)=>b.issuesPerJob-a.issuesPerJob).slice(0,8);
+
+  document.getElementById('overviewOsaTable').innerHTML=rows.length?rows.map(r=>`
+    <tr class="dr ${statusMeta(r.issuesPerJob,0.5,'lower').row}">
+      <td>${r.m}</td>
+      <td class="tr">${fmtK(r.total)}</td>
+      <td class="tr"><span class="b ${statusMeta(r.resolvedRate,85,'higher').badge}">${fmtPct(r.resolvedRate)}</span></td>
+      <td class="tr"><span class="b ${statusMeta(r.repeatRate,15,'lower').badge}">${fmtPct(r.repeatRate)}</span></td>
+      <td class="tr"><strong>${fmt(r.issuesPerJob,3)}</strong></td>
+    </tr>
+  `).join(''):'<tr><td colspan="5" class="empty">No data.</td></tr>';
 }
 
 function renderPartsAccuracyTrend(pd,id){
