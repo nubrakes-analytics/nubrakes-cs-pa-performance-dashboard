@@ -566,7 +566,7 @@ function renderOverview(sd,pd){
   const partsAccuracy=totalJobs>0?(1-jobsWithIssue/totalJobs)*100:null;
 
   document.getElementById('overview-scorecards').innerHTML=
-    scorecard('OSA issues / job', issuesPerJob!=null?fmt(issuesPerJob,3):'—', statusMeta(issuesPerJob,0.5,'lower').label, statusMeta(issuesPerJob,0.5,'lower').badge, COLORS.teal, true) +
+    scorecard('CS issues / job', issuesPerJob!=null?fmt(issuesPerJob,3):'—', statusMeta(issuesPerJob,0.5,'lower').label, statusMeta(issuesPerJob,0.5,'lower').badge, COLORS.teal, true) +
     scorecard('Repeat issue rate', fmtPct(repeatRate), statusMeta(repeatRate,15,'lower').label, statusMeta(repeatRate,15,'lower').badge, COLORS.amber) +
     scorecard('FCR rate', fmtPct(fcrRate), statusMeta(fcrRate,80,'higher').label, statusMeta(fcrRate,80,'higher').badge, COLORS.blue) +
     scorecard('Parts accuracy', fmtPct(partsAccuracy), statusMeta(partsAccuracy,95,'higher').label, statusMeta(partsAccuracy,95,'higher').badge, COLORS.purple);
