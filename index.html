@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NuBrakes OSA & PA Performance Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --bg-card: #17171a;
+    --bg-card2: #1e1e22;
+    --border: rgba(255,255,255,0.07);
+    --border-strong: rgba(255,255,255,0.13);
+    --text-primary: #f0efe8;
+    --text-secondary: #9998a3;
+    --text-muted: #5a5960;
+    --teal: #1D9E75;
+    --teal-light: #5DCAA5;
+    --teal-dim: rgba(29,158,117,0.15);
+    --amber: #EF9F27;
+    --amber-dim: rgba(239,159,39,0.13);
+    --coral: #D85A30;
+    --coral-dim: rgba(216,90,48,0.13);
+    --blue: #378ADD;
+    --blue-dim: rgba(55,138,221,0.13);
+    --purple: #7F77DD;
+    --purple-dim: rgba(127,119,221,0.13);
+    --red: #E24B4A;
+    --red-dim: rgba(226,75,74,0.13);
+    --green: #639922;
+    --green-light: #97C459;
+    --font-main: 'Sora', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  body {
+    font-family: var(--font-main);
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 0;
+  }
+
+  .topbar {
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border-strong);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-mark {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--teal);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 13px; color: #fff; letter-spacing: -0.5px;
+  }
+
+  .topbar-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    letter-spacing: -0.2px;
+  }
+
+  .topbar-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .filter-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  select, .pill-btn {
+    font-family: var(--font-main);
+    font-size: 12px;
+    background: var(--bg-card2);
+    border: 1px solid var(--border-strong);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  select:hover, .pill-btn:hover { border-color: rgba(255,255,255,0.25); color: var(--text-primary); }
+
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 6px var(--teal);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .last-updated {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .main {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .loading-overlay {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 999;
+    gap: 16px;
+    transition: opacity 0.4s;
+  }
+
+  .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .spinner {
+    width: 36px; height: 36px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--teal);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-text {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .error-banner {
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    font-size: 13px;
+    color: #f0afa0;
+    display: none;
+    margin-bottom: 1.5rem;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 1rem;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .section-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+
+  .tag-osa { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(55,138,221,0.3); }
+  .tag-pa  { background: var(--purple-dim); color: var(--purple); border: 1px solid rgba(127,119,221,0.3); }
+  .tag-star { background: var(--teal-dim); color: var(--teal-light); border: 1px solid rgba(29,158,117,0.3); }
+
+  .divider { flex: 1; height: 1px; background: var(--border); }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 2rem;
+  }
+
+  .kpi-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .kpi-card:hover { border-color: var(--border-strong); }
+
+  .kpi-card.primary {
+    border-color: var(--teal);
+    background: linear-gradient(135deg, var(--bg-card) 60%, rgba(29,158,117,0.08));
+  }
+
+  .kpi-accent {
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    border-radius: 12px 0 0 12px;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.3px;
+    margin-bottom: 8px;
+  }
+
+  .kpi-value {
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1;
+    font-family: var(--font-mono);
+    letter-spacing: -1px;
+    margin-bottom: 6px;
+  }
+
+  .kpi-target {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .kpi-status {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 4px;
+  }
+
+  .status-good { background: rgba(99,153,34,0.2); color: var(--green-light); }
+  .status-warn { background: rgba(239,159,39,0.2); color: var(--amber); }
+  .status-bad  { background: rgba(226,75,74,0.2); color: #f08080; }
+  .status-base { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 16px;
+    margin-bottom: 2rem;
+  }
+
+  .chart-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    overflow: hidden;
+  }
+
+  .chart-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+    font-family: var(--font-mono);
+  }
+
+  .chart-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+  }
+
+  .table-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  .table-header-row {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: var(--font-mono);
+  }
+
+  th {
+    padding: 8px 14px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 9px 14px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.025); color: var(--text-primary); }
+
+  td.num { text-align: right; color: var(--text-primary); font-weight: 500; }
+  td.market { color: var(--text-primary); font-weight: 500; }
+
+  .rate-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .rate-bar-bg { flex: 1; height: 4px; background: var(--bg-card2); border-radius: 2px; min-width: 60px; }
+  .rate-bar { height: 4px; border-radius: 2px; }
+
+  .north-star {
+    background: var(--bg-card);
+    border: 1px solid var(--teal);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2rem;
+    align-items: center;
+  }
+
+  .ns-label {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 1.5px;
+    color: var(--teal-light);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .ns-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .ns-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 500px;
+  }
+
+  .ns-big {
+    text-align: right;
+  }
+
+  .ns-value {
+    font-size: 52px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    letter-spacing: -3px;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .ns-target {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 10px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+  }
+
+  .legend-swatch {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .trend-pill {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+  }
+
+  .trend-up { background: rgba(226,75,74,0.2); color: #f08080; }
+  .trend-down { background: rgba(99,153,34,0.2); color: var(--green-light); }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 2rem; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 2rem; }
+
+  @media (max-width: 900px) {
+    .two-col, .three-col, .chart-grid { grid-template-columns: 1fr; }
+    .north-star { grid-template-columns: 1fr; }
+    .ns-big { text-align: left; }
+    .topbar { padding: 0 1rem; }
+    .main { padding: 1rem; }
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 1.5rem 2rem;
+    margin-top: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Fetching operational data...</div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-mark">NB</div>
+    <div>
+      <div class="topbar-title">OSA &amp; PA Performance Dashboard</div>
+      <div class="topbar-sub">Operational Support Analytics · Parts Administration</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="filter-group">
+      <select id="marketFilter"><option value="all">All Markets</option></select>
+      <select id="periodFilter">
+        <option value="all">All Time</option>
+        <option value="last30">Last 30 Days</option>
+        <option value="last90">Last 90 Days</option>
+      </select>
+    </div>
+    <div class="status-dot" id="statusDot"></div>
+    <div class="last-updated" id="lastUpdated">Loading...</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="error-banner" id="errorBanner"></div>
+
+  <!-- North Star -->
+  <div class="north-star" id="northStar">
+    <div>
+      <div class="ns-label">Department North Star</div>
+      <div class="ns-title">Job Completion on First Visit</div>
+      <div class="ns-desc">Completed jobs as a share of all scheduled jobs. Incomplete jobs = rescheduled work, longer wait times, technician productivity loss. Target: &gt;92%</div>
+    </div>
+    <div class="ns-big">
+      <div class="ns-value" id="nsValue" style="color: var(--teal);">—</div>
+      <div class="ns-target">target &gt;92%</div>
+    </div>
+  </div>
+
+  <!-- OSA Section -->
+  <div class="section-header">
+    <span class="section-label">OSA Metrics</span>
+    <span class="section-tag tag-osa">Customer Support</span>
+    <div class="divider"></div>
+  </div>
+
+  <div class="kpi-grid" id="osaKpiGrid">
+    <div class="kpi-card primary">
+      <div class="kpi-accent" style="background: var(--teal)"></div>
+      <div class="kpi-label">Issues / Completed Job</div>
+      <div class="kpi-value" id="kpiIssuesPerJob" style="color: var(--teal)">—</div>
+      <div class="kpi-target">Primary KPI · baseline TBD</div>
+      <span class="kpi-status status-base" id="statusIssuesPerJob">Loading</span>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-accent" style="background: var(--amber)"></div>
+      <div class="kpi-label">Repeat Issue Rate</div>
+      <div class="kpi-value" id="kpiRepeatRate" style="color: var(--amber)">—</div>
+      <div class="kpi-target">Target &lt;15%</div>
+      <span class="kpi-status status-base" id="statusRepeatRate">Loading</span>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-accent" style="background: var(--blue)"></div>
+      <div class="kpi-label">FCR Rate (CS Def.)</div>
+      <div class="kpi-value" id="kpiFCR" style="color: var(--blue)">—</div>
+      <div class="kpi-target">Target &gt;80%</div>
+      <span class="kpi-status status-base" id="statusFCR">Loading</span>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-accent" style="background: var(--coral)"></div>
+      <div class="kpi-label">Total Issues</div>
+      <div class="kpi-value" id="kpiTotalIssues" style="color: var(--coral)">—</div>
+      <div class="kpi-target">All support tickets</div>
+      <span class="kpi-status status-base" id="statusTotalIssues">—</span>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-accent" style="background: var(--purple)"></div>
+      <div class="kpi-label">Resolved Issues</div>
+      <div class="kpi-value" id="kpiResolved" style="color: var(--purple)">—</div>
+      <div class="kpi-target">Of total issues</div>
+      <span class="kpi-status status-base" id="statusResolved">—</span>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-accent" style="background: var(--green-light)"></div>
+      <div class="kpi-label">Completed Jobs</div>
+      <div class="kpi-value" id="kpiCompletedJobs" style="color: var(--green-light)">—</div>
+      <div class="kpi-target">Denominator for ratios</div>
+      <span class="kpi-status status-base">Operational</span>
+    </div>
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-title">Issues per Completed Job — Monthly Trend</div>
+      <div class="chart-subtitle">Lower is better · watch for seasonality</div>
+      <div class="chart-wrap" style="height: 220px;">
+        <canvas id="chartIssuesPerJob" role="img" aria-label="Monthly trend of issues per completed job">Loading...</canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">FCR Rate vs Repeat Issue Rate — Monthly</div>
+      <div class="chart-subtitle">FCR &gt;80% and Repeat &lt;15% are targets</div>
+      <div class="legend" id="legendFcrRepeat">
+        <span class="legend-item"><span class="legend-swatch" style="background:#378ADD"></span>FCR Rate</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#EF9F27"></span>Repeat Rate</span>
+      </div>
+      <div class="chart-wrap" style="height: 200px;">
+        <canvas id="chartFcrRepeat" role="img" aria-label="FCR rate vs repeat issue rate monthly">Loading...</canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Issue Type Breakdown -->
+  <div class="section-header" style="margin-top: 0.5rem;">
+    <span class="section-label">Issue Breakdown</span>
+    <div class="divider"></div>
+  </div>
+
+  <div class="two-col" style="margin-bottom: 2rem;">
+    <div class="chart-card">
+      <div class="chart-title">Issues by Type</div>
+      <div class="chart-subtitle">Volume distribution by issue category</div>
+      <div class="chart-wrap" style="height: 240px;">
+        <canvas id="chartIssueType" role="img" aria-label="Issues by type donut chart">Loading...</canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Issues per Job by Market</div>
+      <div class="chart-subtitle">Horizontal bars · identify hotspot markets</div>
+      <div class="chart-wrap" id="issuesByMarketWrap" style="height: 240px;">
+        <canvas id="chartMarket" role="img" aria-label="Issues per completed job by market">Loading...</canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Market Table -->
+  <div class="table-card" style="margin-bottom: 2rem;">
+    <div class="table-header-row">
+      <div class="chart-title">Market Performance — Support Metrics</div>
+      <div class="chart-subtitle">Sorted by issues per completed job (desc)</div>
+    </div>
+    <div style="overflow-x: auto;">
+      <table id="marketTable">
+        <thead>
+          <tr>
+            <th>Market</th>
+            <th>Total Issues</th>
+            <th>Resolved</th>
+            <th>Repeat Issues</th>
+            <th>Repeat Rate</th>
+            <th>FCR Issues</th>
+            <th>FCR Rate</th>
+            <th>Completed Jobs</th>
+            <th>Issues/Job</th>
+          </tr>
+        </thead>
+        <tbody id="marketTableBody"><tr><td colspan="9" class="empty-state">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PA Section -->
+  <div class="section-header">
+    <span class="section-label">PA Metrics</span>
+    <span class="section-tag tag-pa">Parts Administration</span>
+    <div class="divider"></div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card primary" style="border-color: var(--purple);">
+      <div class="kpi-accent" style="background: var(--purple)"></div>
+      <div class="kpi-label">Parts Order Accuracy Rate</div>
+      <div class="kpi-value" id="kpiPartsAccuracy" style="color: var(--purple)">—</div>
+      <div class="kpi-target">Primary KPI · Target &gt;95%</div>
+      <span class="kpi-status status-base" id="statusPartsAccuracy">Loading</span>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-accent" style="background: var(--coral)"></div>
+      <div class="kpi-label">Parts Issues / 100 Jobs</div>
+      <div class="kpi-value" id="kpiPartsIssuesPer100" style="color: var(--coral)">—</div>
+      <div class="kpi-target">Target &lt;5, then &lt;3, then &lt;1</div>
+      <span class="kpi-status status-base" id="statusPartsIssuesPer100">Loading</span>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-accent" style="background: var(--amber)"></div>
+      <div class="kpi-label">Total Jobs w/ Issue</div>
+      <div class="kpi-value" id="kpiJobsWithIssue" style="color: var(--amber)">—</div>
+      <div class="kpi-target">Cancellations / execution failures</div>
+      <span class="kpi-status status-base">Operational</span>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-accent" style="background: var(--blue)"></div>
+      <div class="kpi-label">Parts Total Jobs</div>
+      <div class="kpi-value" id="kpiPartsTotalJobs" style="color: var(--blue)">—</div>
+      <div class="kpi-target">Denominator for PA metrics</div>
+      <span class="kpi-status status-base">Operational</span>
+    </div>
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-title">Parts Accuracy Rate — Monthly Trend</div>
+      <div class="chart-subtitle">Target line at 95% · watch for drops</div>
+      <div class="chart-wrap" style="height: 220px;">
+        <canvas id="chartPartsAccuracy" role="img" aria-label="Parts accuracy rate monthly trend">Loading...</canvas>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Issue Rate by Cancellation Reason</div>
+      <div class="chart-subtitle">Top reasons driving parts & dispatch failures</div>
+      <div class="chart-wrap" id="partsReasonWrap" style="height: 220px;">
+        <canvas id="chartPartsReason" role="img" aria-label="Issue rate by cancellation reason">Loading...</canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parts Tables -->
+  <div class="two-col" style="margin-bottom: 2rem;">
+    <div class="table-card">
+      <div class="table-header-row">
+        <div class="chart-title">Parts Issues by Supplier</div>
+        <div class="chart-subtitle">Sorted by issue rate (desc)</div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table id="supplierTable">
+          <thead>
+            <tr><th>Supplier</th><th>Total Jobs</th><th>Jobs w/ Issue</th><th>Issue Rate</th><th>Accuracy</th></tr>
+          </thead>
+          <tbody id="supplierTableBody"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-header-row">
+        <div class="chart-title">Parts Issues by Agent</div>
+        <div class="chart-subtitle">CS/Sales agent accountability</div>
+      </div>
+      <div style="overflow-x: auto;">
+        <table id="agentTable">
+          <thead>
+            <tr><th>Agent</th><th>Total Jobs</th><th>Jobs w/ Issue</th><th>Issue Rate</th><th>Accuracy</th></tr>
+          </thead>
+          <tbody id="agentTableBody"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <div class="footer-note">NuBrakes · OSA & PA Operational Dashboard · Data: fact_nubrakes_front_contact_support_daily + fact_nubrakes_reason_parts_daily</div>
+  <div class="footer-note" id="recordCount">—</div>
+</footer>
+
+<script>
+const SUPPORT_URL = 'https://raw.githubusercontent.com/nubrakes-analytics/NuBrakes-Copilot/main/data/fact_nubrakes_front_contact_support_daily.json';
+const PARTS_URL   = 'https://raw.githubusercontent.com/nubrakes-analytics/NuBrakes-Copilot/main/data/fact_nubrakes_reason_parts_daily.json';
+
+const CHART_COLORS = {
+  teal:   '#1D9E75', tealA: 'rgba(29,158,117,0.18)',
+  amber:  '#EF9F27', amberA:'rgba(239,159,39,0.18)',
+  coral:  '#D85A30', coralA:'rgba(216,90,48,0.18)',
+  blue:   '#378ADD', blueA: 'rgba(55,138,221,0.18)',
+  purple: '#7F77DD', purpleA:'rgba(127,119,221,0.18)',
+  green:  '#97C459', greenA:'rgba(151,196,89,0.18)',
+  red:    '#E24B4A',
+  grid:   'rgba(255,255,255,0.06)',
+  text:   'rgba(255,255,255,0.35)',
+};
+
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false }, tooltip: {
+    backgroundColor: '#1e1e22',
+    titleColor: '#f0efe8',
+    bodyColor: '#9998a3',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    padding: 10,
+    callbacks: {}
+  }},
+  scales: {
+    x: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text, font: { family: "'DM Mono', monospace", size: 10 } } },
+    y: { grid: { color: CHART_COLORS.grid }, ticks: { color: CHART_COLORS.text, font: { family: "'DM Mono', monospace", size: 10 } }, beginAtZero: true }
+  }
+};
+
+let supportData = [], partsData = [];
+let charts = {};
+
+function setLoading(msg) {
+  document.getElementById('loadingText').textContent = msg;
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBanner');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideLoading() {
+  const el = document.getElementById('loadingOverlay');
+  el.classList.add('hidden');
+  setTimeout(() => el.remove(), 500);
+}
+
+function fmt(n, decimals = 2) {
+  if (n == null || isNaN(n)) return '—';
+  return Number(n).toFixed(decimals);
+}
+
+function fmtPct(n) {
+  if (n == null || isNaN(n)) return '—';
+  return Number(n).toFixed(1) + '%';
+}
+
+function fmtK(n) {
+  if (n == null || isNaN(n)) return '—';
+  if (Math.abs(n) >= 1000) return (n/1000).toFixed(1) + 'K';
+  return Math.round(n).toString();
+}
+
+function statusClass(val, target, dir = 'lower') {
+  if (val == null || isNaN(val)) return 'status-base';
+  return dir === 'lower'
+    ? (val <= target ? 'status-good' : val <= target * 1.2 ? 'status-warn' : 'status-bad')
+    : (val >= target ? 'status-good' : val >= target * 0.9 ? 'status-warn' : 'status-bad');
+}
+
+function statusLabel(val, target, dir = 'lower') {
+  if (val == null || isNaN(val)) return 'No data';
+  return dir === 'lower'
+    ? (val <= target ? 'On target' : val <= target * 1.2 ? 'Near target' : 'Above target')
+    : (val >= target ? 'On target' : val >= target * 0.9 ? 'Near target' : 'Below target');
+}
+
+function filterData(data, market, period) {
+  let d = [...data];
+  if (market !== 'all') d = d.filter(r => r.market === market || r.Market === market);
+  if (period !== 'all') {
+    const now = new Date();
+    const days = period === 'last30' ? 30 : 90;
+    const cutoff = new Date(now - days * 86400000);
+    d = d.filter(r => {
+      const day = r.Day || r.day || r.date;
+      return day && new Date(day) >= cutoff;
+    });
+  }
+  return d;
+}
+
+function groupBy(data, key) {
+  return data.reduce((acc, r) => {
+    const k = r[key] || 'Unknown';
+    if (!acc[k]) acc[k] = [];
+    acc[k].push(r);
+    return acc;
+  }, {});
+}
+
+function groupByMonth(data, dayKey = 'Day') {
+  return data.reduce((acc, r) => {
+    const d = r[dayKey] || r.day || r.date;
+    if (!d) return acc;
+    const m = d.slice(0, 7);
+    if (!acc[m]) acc[m] = [];
+    acc[m].push(r);
+    return acc;
+  }, {});
+}
+
+function sum(arr, key) { return arr.reduce((s, r) => s + (parseFloat(r[key]) || 0), 0); }
+
+function makeChart(id, config) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  charts[id] = new Chart(ctx, config);
+}
+
+function renderDashboard() {
+  const market = document.getElementById('marketFilter').value;
+  const period = document.getElementById('periodFilter').value;
+
+  const sd = filterData(supportData, market, period);
+  const pd = filterData(partsData, market, period);
+
+  renderOSAKPIs(sd);
+  renderNorthStar(sd);
+  renderTrendCharts(sd);
+  renderIssueBreakdown(sd, market, period);
+  renderMarketTable(sd);
+  renderPAKPIs(pd);
+  renderPATrend(pd);
+  renderPartsReasonChart(pd);
+  renderPartsSupplierTable(pd);
+  renderPartsAgentTable(pd);
+
+  document.getElementById('recordCount').textContent =
+    `${sd.length.toLocaleString()} support rows · ${pd.length.toLocaleString()} parts rows`;
+}
+
+function renderNorthStar(sd) {
+  const totalIssues = sum(sd, 'total_issues');
+  const completedJobs = sum(sd, 'completed_jobs');
+  const pct = completedJobs > 0 ? (completedJobs / (completedJobs + totalIssues * 0.2)) * 100 : null;
+  const el = document.getElementById('nsValue');
+  if (completedJobs > 0 && totalIssues >= 0) {
+    const rate = Math.min(100, (completedJobs / (completedJobs + (sum(sd,'repeat_issues') || 0))) * 100);
+    el.textContent = fmtPct(rate);
+    el.style.color = rate >= 92 ? 'var(--teal)' : rate >= 85 ? 'var(--amber)' : 'var(--coral)';
+  } else {
+    el.textContent = 'Baseline';
+    el.style.color = 'var(--text-muted)';
+  }
+}
+
+function renderOSAKPIs(sd) {
+  const totalIssues = sum(sd, 'total_issues');
+  const resolvedIssues = sum(sd, 'resolved_issues');
+  const repeatIssues = sum(sd, 'repeat_issues');
+  const fcrIssues = sum(sd, 'fcr_issues');
+  const completedJobs = sum(sd, 'completed_jobs');
+
+  const issuesPerJob = completedJobs > 0 ? totalIssues / completedJobs : null;
+  const repeatRate = totalIssues > 0 ? (repeatIssues / totalIssues) * 100 : null;
+  const fcrRate = totalIssues > 0 ? (fcrIssues / totalIssues) * 100 : null;
+  const resolvedRate = totalIssues > 0 ? (resolvedIssues / totalIssues) * 100 : null;
+
+  set('kpiIssuesPerJob', issuesPerJob != null ? fmt(issuesPerJob, 3) : 'Baseline');
+  set('kpiRepeatRate', repeatRate != null ? fmtPct(repeatRate) : 'Baseline');
+  set('kpiFCR', fcrRate != null ? fmtPct(fcrRate) : 'Baseline');
+  set('kpiTotalIssues', fmtK(totalIssues));
+  set('kpiResolved', resolvedIssues > 0 ? fmtK(resolvedIssues) + (resolvedRate ? ' ('+fmtPct(resolvedRate)+')' : '') : 'Baseline');
+  set('kpiCompletedJobs', fmtK(completedJobs));
+
+  setStatus('statusIssuesPerJob', issuesPerJob, 0.5, 'lower');
+  setStatus('statusRepeatRate', repeatRate, 15, 'lower');
+  setStatus('statusFCR', fcrRate, 80, 'higher');
+  setStatus('statusTotalIssues', totalIssues, null, null, totalIssues + ' tickets');
+  setStatus('statusResolved', resolvedRate, 80, 'higher');
+}
+
+function set(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+function setStatus(id, val, target, dir, label) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (label) { el.textContent = label; el.className = 'kpi-status status-base'; return; }
+  el.className = 'kpi-status ' + statusClass(val, target, dir);
+  el.textContent = statusLabel(val, target, dir);
+}
+
+function renderTrendCharts(sd) {
+  const byMonth = groupByMonth(sd, 'Day');
+  const months = Object.keys(byMonth).sort();
+  const labels = months.map(m => m.slice(0,7));
+
+  const issuesPerJobMonthly = months.map(m => {
+    const rows = byMonth[m];
+    const issues = sum(rows, 'total_issues');
+    const jobs = sum(rows, 'completed_jobs');
+    return jobs > 0 ? parseFloat((issues / jobs).toFixed(3)) : 0;
+  });
+
+  const fcrMonthly = months.map(m => {
+    const rows = byMonth[m];
+    const fcr = sum(rows, 'fcr_issues');
+    const total = sum(rows, 'total_issues');
+    return total > 0 ? parseFloat(((fcr / total) * 100).toFixed(1)) : 0;
+  });
+
+  const repeatMonthly = months.map(m => {
+    const rows = byMonth[m];
+    const repeat = sum(rows, 'repeat_issues');
+    const total = sum(rows, 'total_issues');
+    return total > 0 ? parseFloat(((repeat / total) * 100).toFixed(1)) : 0;
+  });
+
+  if (labels.length === 0) {
+    ['chartIssuesPerJob','chartFcrRepeat'].forEach(id => {
+      const c = document.getElementById(id);
+      if (c) { c.parentElement.innerHTML = '<div class="empty-state">No trend data available for this filter.</div>'; }
+    });
+    return;
+  }
+
+  makeChart('chartIssuesPerJob', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Issues/Job',
+        data: issuesPerJobMonthly,
+        borderColor: CHART_COLORS.teal,
+        backgroundColor: CHART_COLORS.tealA,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: CHART_COLORS.teal,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: { ...chartDefaults }
+  });
+
+  makeChart('chartFcrRepeat', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'FCR Rate %',
+          data: fcrMonthly,
+          borderColor: CHART_COLORS.blue,
+          backgroundColor: CHART_COLORS.blueA,
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: false,
+          tension: 0.3,
+          borderDash: []
+        },
+        {
+          label: 'Repeat Rate %',
+          data: repeatMonthly,
+          borderColor: CHART_COLORS.amber,
+          backgroundColor: CHART_COLORS.amberA,
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: false,
+          tension: 0.3,
+          borderDash: [5, 3]
+        }
+      ]
+    },
+    options: {
+      ...chartDefaults,
+      plugins: {
+        ...chartDefaults.plugins,
+        annotation: {}
+      },
+      scales: {
+        ...chartDefaults.scales,
+        y: { ...chartDefaults.scales.y, min: 0, max: 100, ticks: { ...chartDefaults.scales.y.ticks, callback: v => v + '%' } }
+      }
+    }
+  });
+}
+
+function renderIssueBreakdown(sd, market, period) {
+  const byIssueType = groupBy(sd, 'issue_type');
+  const issueTypes = Object.keys(byIssueType).filter(k => k && k !== 'Unknown' && k !== 'null').slice(0, 8);
+  const typeColors = [CHART_COLORS.teal, CHART_COLORS.blue, CHART_COLORS.amber, CHART_COLORS.coral, CHART_COLORS.purple, CHART_COLORS.green, CHART_COLORS.red, '#9998a3'];
+
+  if (issueTypes.length > 0) {
+    const typeData = issueTypes.map(t => sum(byIssueType[t], 'total_issues'));
+    makeChart('chartIssueType', {
+      type: 'doughnut',
+      data: {
+        labels: issueTypes,
+        datasets: [{ data: typeData, backgroundColor: typeColors.slice(0, issueTypes.length), borderWidth: 0, hoverOffset: 4 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: {
+          legend: { display: true, position: 'right', labels: { color: CHART_COLORS.text, font: { family: "'DM Mono'", size: 10 }, boxWidth: 10, padding: 8 } },
+          tooltip: chartDefaults.plugins.tooltip
+        }
+      }
+    });
+  } else {
+    const c = document.getElementById('chartIssueType');
+    if (c) c.parentElement.innerHTML = '<div class="empty-state">No issue type data available.</div>';
+  }
+
+  const byMarket = groupBy(sd, 'market');
+  const markets = Object.keys(byMarket).filter(k => k && k !== 'Unknown').slice(0, 12);
+  const marketIssuesPerJob = markets.map(m => {
+    const rows = byMarket[m];
+    const issues = sum(rows, 'total_issues');
+    const jobs = sum(rows, 'completed_jobs');
+    return jobs > 0 ? parseFloat((issues / jobs).toFixed(3)) : 0;
+  });
+  const sorted = markets.map((m,i) => ({ m, v: marketIssuesPerJob[i] })).sort((a,b) => b.v - a.v);
+
+  const wrap = document.getElementById('issuesByMarketWrap');
+  if (wrap) wrap.style.height = Math.max(240, sorted.length * 32 + 60) + 'px';
+
+  if (sorted.length > 0) {
+    makeChart('chartMarket', {
+      type: 'bar',
+      data: {
+        labels: sorted.map(s => s.m),
+        datasets: [{
+          label: 'Issues/Job',
+          data: sorted.map(s => s.v),
+          backgroundColor: sorted.map(s => s.v > 1 ? CHART_COLORS.coral : s.v > 0.5 ? CHART_COLORS.amber : CHART_COLORS.teal),
+          borderRadius: 3,
+          barThickness: 18
+        }]
+      },
+      options: {
+        ...chartDefaults,
+        indexAxis: 'y',
+        scales: {
+          x: { ...chartDefaults.scales.x, beginAtZero: true },
+          y: { ...chartDefaults.scales.y, ticks: { ...chartDefaults.scales.y.ticks, autoSkip: false } }
+        }
+      }
+    });
+  } else {
+    const c = document.getElementById('chartMarket');
+    if (c) c.parentElement.innerHTML = '<div class="empty-state">No market data available.</div>';
+  }
+}
+
+function renderMarketTable(sd) {
+  const byMarket = groupBy(sd, 'market');
+  const rows = Object.keys(byMarket).filter(k => k && k !== 'Unknown').map(m => {
+    const d = byMarket[m];
+    const totalIssues = sum(d, 'total_issues');
+    const resolvedIssues = sum(d, 'resolved_issues');
+    const repeatIssues = sum(d, 'repeat_issues');
+    const fcrIssues = sum(d, 'fcr_issues');
+    const completedJobs = sum(d, 'completed_jobs');
+    const repeatRate = totalIssues > 0 ? (repeatIssues / totalIssues) * 100 : 0;
+    const fcrRate = totalIssues > 0 ? (fcrIssues / totalIssues) * 100 : 0;
+    const issuesPerJob = completedJobs > 0 ? totalIssues / completedJobs : 0;
+    return { m, totalIssues, resolvedIssues, repeatIssues, repeatRate, fcrIssues, fcrRate, completedJobs, issuesPerJob };
+  }).sort((a, b) => b.issuesPerJob - a.issuesPerJob);
+
+  const tbody = document.getElementById('marketTableBody');
+  if (!tbody) return;
+  if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No data for selected filters.</td></tr>'; return; }
+
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="market">${r.m}</td>
+      <td class="num">${fmtK(r.totalIssues)}</td>
+      <td class="num">${fmtK(r.resolvedIssues)}</td>
+      <td class="num">${fmtK(r.repeatIssues)}</td>
+      <td>
+        <div class="rate-bar-wrap">
+          <div class="rate-bar-bg"><div class="rate-bar" style="width:${Math.min(100,r.repeatRate)}%;background:${r.repeatRate>15?CHART_COLORS.coral:r.repeatRate>10?CHART_COLORS.amber:CHART_COLORS.teal}"></div></div>
+          <span style="min-width:40px;text-align:right;color:${r.repeatRate>15?CHART_COLORS.coral:r.repeatRate>10?CHART_COLORS.amber:CHART_COLORS.teal}">${fmtPct(r.repeatRate)}</span>
+        </div>
+      </td>
+      <td class="num">${fmtK(r.fcrIssues)}</td>
+      <td>
+        <div class="rate-bar-wrap">
+          <div class="rate-bar-bg"><div class="rate-bar" style="width:${Math.min(100,r.fcrRate)}%;background:${r.fcrRate>=80?CHART_COLORS.teal:r.fcrRate>=60?CHART_COLORS.amber:CHART_COLORS.coral}"></div></div>
+          <span style="min-width:40px;text-align:right;color:${r.fcrRate>=80?CHART_COLORS.teal:r.fcrRate>=60?CHART_COLORS.amber:CHART_COLORS.coral}">${fmtPct(r.fcrRate)}</span>
+        </div>
+      </td>
+      <td class="num">${fmtK(r.completedJobs)}</td>
+      <td class="num" style="color:${r.issuesPerJob>1?CHART_COLORS.coral:r.issuesPerJob>0.5?CHART_COLORS.amber:CHART_COLORS.teal}">${fmt(r.issuesPerJob,3)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderPAKPIs(pd) {
+  const totalJobs = sum(pd, 'total_jobs');
+  const jobsWithIssue = sum(pd, 'jobs_with_issue');
+  const issueRate = totalJobs > 0 ? (jobsWithIssue / totalJobs) * 100 : null;
+  const accuracyRate = issueRate != null ? 100 - issueRate : null;
+  const issuesPer100 = totalJobs > 0 ? (jobsWithIssue / totalJobs) * 100 : null;
+
+  set('kpiPartsAccuracy', accuracyRate != null ? fmtPct(accuracyRate) : 'Baseline');
+  set('kpiPartsIssuesPer100', issuesPer100 != null ? fmt(issuesPer100, 1) : 'Baseline');
+  set('kpiJobsWithIssue', fmtK(jobsWithIssue));
+  set('kpiPartsTotalJobs', fmtK(totalJobs));
+
+  setStatus('statusPartsAccuracy', accuracyRate, 95, 'higher');
+  setStatus('statusPartsIssuesPer100', issuesPer100, 5, 'lower');
+}
+
+function renderPATrend(pd) {
+  const byMonth = groupByMonth(pd, 'Day');
+  const months = Object.keys(byMonth).sort();
+  const labels = months.map(m => m.slice(0, 7));
+
+  const accuracyMonthly = months.map(m => {
+    const rows = byMonth[m];
+    const total = sum(rows, 'total_jobs');
+    const issues = sum(rows, 'jobs_with_issue');
+    return total > 0 ? parseFloat(((1 - issues / total) * 100).toFixed(1)) : 0;
+  });
+
+  if (labels.length === 0) {
+    const c = document.getElementById('chartPartsAccuracy');
+    if (c) c.parentElement.innerHTML = '<div class="empty-state">No trend data available.</div>';
+    return;
+  }
+
+  makeChart('chartPartsAccuracy', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Accuracy %',
+        data: accuracyMonthly,
+        borderColor: CHART_COLORS.purple,
+        backgroundColor: CHART_COLORS.purpleA,
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: CHART_COLORS.purple,
+        fill: true,
+        tension: 0.3
+      }, {
+        label: 'Target (95%)',
+        data: labels.map(() => 95),
+        borderColor: 'rgba(151,196,89,0.5)',
+        borderWidth: 1,
+        borderDash: [4, 4],
+        pointRadius: 0,
+        fill: false
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      scales: {
+        ...chartDefaults.scales,
+        y: { ...chartDefaults.scales.y, min: 0, max: 100, ticks: { ...chartDefaults.scales.y.ticks, callback: v => v + '%' } }
+      }
+    }
+  });
+}
+
+function renderPartsReasonChart(pd) {
+  const byReason = groupBy(pd, 'cancellation_reason');
+  const reasons = Object.keys(byReason).filter(k => k && k !== 'Unknown' && k !== 'null').slice(0, 10);
+  const reasonRates = reasons.map(r => {
+    const rows = byReason[r];
+    const total = sum(rows, 'total_jobs');
+    const issues = sum(rows, 'jobs_with_issue');
+    return total > 0 ? parseFloat(((issues / total) * 100).toFixed(1)) : 0;
+  });
+  const sorted = reasons.map((r, i) => ({ r, v: reasonRates[i] })).sort((a, b) => b.v - a.v);
+
+  const wrap = document.getElementById('partsReasonWrap');
+  if (wrap) wrap.style.height = Math.max(220, sorted.length * 30 + 60) + 'px';
+
+  if (sorted.length === 0) {
+    const c = document.getElementById('chartPartsReason');
+    if (c) c.parentElement.innerHTML = '<div class="empty-state">No cancellation reason data available.</div>';
+    return;
+  }
+
+  makeChart('chartPartsReason', {
+    type: 'bar',
+    data: {
+      labels: sorted.map(s => s.r.length > 25 ? s.r.slice(0, 23) + '…' : s.r),
+      datasets: [{
+        label: 'Issue Rate %',
+        data: sorted.map(s => s.v),
+        backgroundColor: sorted.map(s => s.v > 20 ? CHART_COLORS.coral : s.v > 10 ? CHART_COLORS.amber : CHART_COLORS.purple),
+        borderRadius: 3,
+        barThickness: 16
+      }]
+    },
+    options: {
+      ...chartDefaults,
+      indexAxis: 'y',
+      scales: {
+        x: { ...chartDefaults.scales.x, ticks: { ...chartDefaults.scales.x.ticks, callback: v => v + '%' } },
+        y: { ...chartDefaults.scales.y, ticks: { ...chartDefaults.scales.y.ticks, autoSkip: false } }
+      }
+    }
+  });
+}
+
+function renderPartsSupplierTable(pd) {
+  const bySupplier = groupBy(pd, 'supplier');
+  const rows = Object.keys(bySupplier).filter(k => k && k !== 'Unknown' && k !== 'null').map(s => {
+    const d = bySupplier[s];
+    const total = sum(d, 'total_jobs');
+    const issues = sum(d, 'jobs_with_issue');
+    const issueRate = total > 0 ? (issues / total) * 100 : 0;
+    const accuracy = 100 - issueRate;
+    return { s, total, issues, issueRate, accuracy };
+  }).sort((a, b) => b.issueRate - a.issueRate).slice(0, 15);
+
+  const tbody = document.getElementById('supplierTableBody');
+  if (!tbody) return;
+  if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No supplier data.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="market">${r.s}</td>
+      <td class="num">${fmtK(r.total)}</td>
+      <td class="num">${fmtK(r.issues)}</td>
+      <td style="color:${r.issueRate>10?CHART_COLORS.coral:r.issueRate>5?CHART_COLORS.amber:CHART_COLORS.teal}">${fmtPct(r.issueRate)}</td>
+      <td style="color:${r.accuracy>=95?CHART_COLORS.teal:r.accuracy>=90?CHART_COLORS.amber:CHART_COLORS.coral}">${fmtPct(r.accuracy)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderPartsAgentTable(pd) {
+  const byAgent = groupBy(pd, 'agent');
+  const rows = Object.keys(byAgent).filter(k => k && k !== 'Unknown' && k !== 'null').map(a => {
+    const d = byAgent[a];
+    const total = sum(d, 'total_jobs');
+    const issues = sum(d, 'jobs_with_issue');
+    const issueRate = total > 0 ? (issues / total) * 100 : 0;
+    const accuracy = 100 - issueRate;
+    return { a, total, issues, issueRate, accuracy };
+  }).sort((a, b) => b.issueRate - a.issueRate).slice(0, 15);
+
+  const tbody = document.getElementById('agentTableBody');
+  if (!tbody) return;
+  if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No agent data.</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td class="market">${r.a}</td>
+      <td class="num">${fmtK(r.total)}</td>
+      <td class="num">${fmtK(r.issues)}</td>
+      <td style="color:${r.issueRate>10?CHART_COLORS.coral:r.issueRate>5?CHART_COLORS.amber:CHART_COLORS.teal}">${fmtPct(r.issueRate)}</td>
+      <td style="color:${r.accuracy>=95?CHART_COLORS.teal:r.accuracy>=90?CHART_COLORS.amber:CHART_COLORS.coral}">${fmtPct(r.accuracy)}</td>
+    </tr>
+  `).join('');
+}
+
+function populateMarketFilter(sd, pd) {
+  const markets = new Set();
+  [...sd, ...pd].forEach(r => { if (r.market) markets.add(r.market); });
+  const sel = document.getElementById('marketFilter');
+  [...markets].sort().forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    sel.appendChild(opt);
+  });
+}
+
+async function init() {
+  try {
+    setLoading('Fetching support data...');
+    const [r1, r2] = await Promise.all([
+      fetch(SUPPORT_URL),
+      fetch(PARTS_URL)
+    ]);
+
+    setLoading('Parsing datasets...');
+    const [d1, d2] = await Promise.all([r1.json(), r2.json()]);
+
+    supportData = Array.isArray(d1) ? d1 : (d1.data || []);
+    partsData   = Array.isArray(d2) ? d2 : (d2.data || []);
+
+    const lastDay = supportData.map(r => r.Day || r.day || r.date).filter(Boolean).sort().pop();
+    document.getElementById('lastUpdated').textContent = lastDay ? 'Last: ' + lastDay : 'Live';
+
+    populateMarketFilter(supportData, partsData);
+
+    document.getElementById('marketFilter').addEventListener('change', renderDashboard);
+    document.getElementById('periodFilter').addEventListener('change', renderDashboard);
+
+    setLoading('Rendering dashboard...');
+    renderDashboard();
+    hideLoading();
+
+  } catch (err) {
+    hideLoading();
+    showError('Failed to load data: ' + err.message + '. Check that the GitHub URLs are publicly accessible and the JSON format is valid.');
+    document.getElementById('lastUpdated').textContent = 'Data error';
+    document.getElementById('statusDot').style.background = '#E24B4A';
+    document.getElementById('statusDot').style.boxShadow = '0 0 6px #E24B4A';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
