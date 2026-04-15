@@ -88,7 +88,8 @@ body{font-family:var(--font-main);background:var(--bg-app);color:var(--text-main
 .tabs__btn{padding:8px 20px;border:none;background:none;color:var(--text-soft);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1.5px}
 .tabs__btn.is-active{color:var(--text-strong);border-bottom-color:var(--text-strong)}
 
-.pg{display:none}.pg.on{display:block}
+.pg{display:none}
+.pg.on{display:block}
 
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 0 14px;flex-wrap:wrap;gap:10px}
 .month-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -163,10 +164,19 @@ tr.dr:hover td{filter:brightness(.985)}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-text{font-size:13px;color:var(--text-main);font-weight:600}
 
-.cg{color:#047857 !important}.ca{color:#c2410c !important}.cr{color:#be123c !important}
+.cg{color:#047857 !important}
+.ca{color:#c2410c !important}
+.cr{color:#be123c !important}
 
-@media (max-width:1100px){.mrow,.two-col{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:700px){.mrow,.two-col{grid-template-columns:1fr}select{width:100%;min-width:100%}.banner__metric{text-align:left}.banner__value{font-size:36px}}
+@media (max-width:1100px){
+  .mrow,.two-col{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:700px){
+  .mrow,.two-col{grid-template-columns:1fr}
+  select{width:100%;min-width:100%}
+  .banner__metric{text-align:left}
+  .banner__value{font-size:36px}
+}
 </style>
 </head>
 <body>
@@ -221,11 +231,11 @@ tr.dr:hover td{filter:brightness(.985)}
         <div>
           <div class="banner__label">Department north star</div>
           <div class="banner__title">Job Completion on First Visit</div>
-          <div class="banner__desc">Completed jobs as a share of all scheduled jobs. Incomplete jobs create rescheduled work, longer wait times, and technician productivity drag. Goal: keep first-visit success above 92%.</div>
+          <div class="banner__desc">Proxy metric using completed jobs versus repeat support burden. This is directional, not a true scheduled-jobs first-visit completion rate. Goal: keep the proxy above 92%.</div>
         </div>
         <div class="banner__metric">
           <div class="banner__value" id="nsValue">—</div>
-          <div class="banner__sub">target &gt; 92%</div>
+          <div class="banner__sub">proxy target &gt; 92%</div>
         </div>
       </div>
 
@@ -504,11 +514,21 @@ const chartDefaults={
 function sw(key, btn){
   document.querySelectorAll('.tabs__btn').forEach(b=>b.classList.remove('is-active'));
   if(btn) btn.classList.add('is-active');
-  ['overview','osa','pa'].forEach(k=>document.getElementById('pg-'+k).classList.toggle('on',k===key));
+
+  ['overview','CS','pa'].forEach(k=>{
+    const el=document.getElementById('pg-'+k);
+    if(el) el.classList.toggle('on',k===key);
+  });
 }
 
-function setLoading(msg){document.getElementById('loading-text').textContent=msg}
-function hideLoading(){document.getElementById('loading-overlay').style.display='none'}
+function setLoading(msg){
+  document.getElementById('loading-text').textContent=msg;
+}
+
+function hideLoading(){
+  document.getElementById('loading-overlay').style.display='none';
+}
+
 function showError(msg){
   const el=document.getElementById('errorBanner');
   el.style.display='block';
@@ -516,10 +536,23 @@ function showError(msg){
   document.getElementById('status-pill').className='status-pill status-pill--danger';
   document.getElementById('ds-pill').textContent='Data error';
 }
-function fmt(n,d=2){return n==null||isNaN(n)?'—':Number(n).toFixed(d)}
-function fmtPct(n){return n==null||isNaN(n)?'—':Number(n).toFixed(1)+'%'}
-function fmtK(n){if(n==null||isNaN(n))return '—';return Math.abs(n)>=1000?(n/1000).toFixed(1)+'K':Math.round(n).toString()}
-function sum(arr,key){return arr.reduce((s,r)=>s+(parseFloat(r[key])||0),0)}
+
+function fmt(n,d=2){
+  return n==null || isNaN(n) ? '—' : Number(n).toFixed(d);
+}
+
+function fmtPct(n){
+  return n==null || isNaN(n) ? '—' : Number(n).toFixed(1)+'%';
+}
+
+function fmtK(n){
+  if(n==null || isNaN(n)) return '—';
+  return Math.abs(n)>=1000 ? (n/1000).toFixed(1)+'K' : Math.round(n).toString();
+}
+
+function sum(arr,key){
+  return arr.reduce((s,r)=>s+(parseFloat(r[key])||0),0);
+}
 
 function groupBy(data,key){
   return data.reduce((a,r)=>{
@@ -590,11 +623,10 @@ function normalizePartsRow(r){
   };
 }
 
-/* ---------------------------
-   UNIQUE / DE-DUPED COMPLETED JOBS
-   completed_jobs is repeated across support rows
-   so we average within market+day, then sum upward
----------------------------- */
+/*
+  completed_jobs appears repeated across support rows.
+  using MAX by market+day is safer than AVG for repeated-denominator datasets.
+*/
 function dedupCompletedJobs(rows){
   const buckets = {};
 
@@ -604,21 +636,13 @@ function dedupCompletedJobs(rows){
     if(!day) return;
 
     const key = `${market}__${day}`;
-    if(!buckets[key]){
-      buckets[key] = { sum: 0, count: 0 };
-    }
-
     const val = parseFloat(r.completed_jobs);
-    if(!isNaN(val)){
-      buckets[key].sum += val;
-      buckets[key].count += 1;
-    }
+    if(isNaN(val)) return;
+
+    buckets[key] = Math.max(buckets[key] || 0, val);
   });
 
-  return Object.values(buckets).reduce((total, b) => {
-    if(!b.count) return total;
-    return total + (b.sum / b.count);
-  }, 0);
+  return Object.values(buckets).reduce((total, v) => total + v, 0);
 }
 
 function dedupCompletedJobsByMonth(rows){
@@ -631,22 +655,15 @@ function dedupCompletedJobsByMonth(rows){
 
     const month = String(day).slice(0,7);
     const key = `${month}__${market}__${day}`;
-
-    if(!buckets[key]){
-      buckets[key] = { month, sum: 0, count: 0 };
-    }
-
     const val = parseFloat(r.completed_jobs);
-    if(!isNaN(val)){
-      buckets[key].sum += val;
-      buckets[key].count += 1;
-    }
+    if(isNaN(val)) return;
+
+    buckets[key] = { month, value: Math.max(buckets[key]?.value || 0, val) };
   });
 
   const monthTotals = {};
   Object.values(buckets).forEach(b => {
-    const avg = b.count ? (b.sum / b.count) : 0;
-    monthTotals[b.month] = (monthTotals[b.month] || 0) + avg;
+    monthTotals[b.month] = (monthTotals[b.month] || 0) + b.value;
   });
 
   return monthTotals;
@@ -661,33 +678,29 @@ function dedupCompletedJobsByMarket(rows){
     if(!day) return;
 
     const key = `${market}__${day}`;
-    if(!buckets[key]){
-      buckets[key] = { market, sum: 0, count: 0 };
-    }
-
     const val = parseFloat(r.completed_jobs);
-    if(!isNaN(val)){
-      buckets[key].sum += val;
-      buckets[key].count += 1;
-    }
+    if(isNaN(val)) return;
+
+    buckets[key] = { market, value: Math.max(buckets[key]?.value || 0, val) };
   });
 
   const totals = {};
   Object.values(buckets).forEach(b => {
-    const avg = b.count ? (b.sum / b.count) : 0;
-    totals[b.market] = (totals[b.market] || 0) + avg;
+    totals[b.market] = (totals[b.market] || 0) + b.value;
   });
 
   return totals;
 }
 
 function statusMeta(val,target,dir='lower'){
-  if(val==null||isNaN(val)) return {badge:'bt',label:'No data',row:''};
+  if(val==null || isNaN(val)) return {badge:'bt',label:'No data',row:''};
+
   if(dir==='lower'){
     if(val<=target) return {badge:'bg',label:'On target',row:'win-row'};
     if(val<=target*1.2) return {badge:'ba',label:'Near target',row:'warn-row'};
     return {badge:'br',label:'Above target',row:'danger-row'};
   }
+
   if(val>=target) return {badge:'bg',label:'On target',row:'win-row'};
   if(val>=target*0.9) return {badge:'ba',label:'Near target',row:'warn-row'};
   return {badge:'br',label:'Below target',row:'danger-row'};
@@ -695,24 +708,37 @@ function statusMeta(val,target,dir='lower'){
 
 function filterData(data,market,period){
   let d=[...data];
-  if(market!=='all') d=d.filter(r=>r.market===market);
+
+  if(market!=='all'){
+    d=d.filter(r=>r.market===market);
+  }
+
   if(period!=='all'){
-    const now=new Date();
     const days=period==='last30'?30:90;
-    const cutoff=new Date(now.getTime()-days*86400000);
+    const today=new Date();
+    today.setHours(0,0,0,0);
+
+    const cutoff=new Date(today);
+    cutoff.setDate(cutoff.getDate()-days);
+
     d=d.filter(r=>{
       const day=r.Day||r.day||r.date;
-      return day && new Date(day)>=cutoff;
+      if(!day) return false;
+      const dt=new Date(day+'T00:00:00');
+      return !isNaN(dt.getTime()) && dt>=cutoff;
     });
   }
+
   return d;
 }
 
 function populateFilters(){
   const markets=new Set();
+
   [...supportData,...partsData].forEach(r=>{
     if(r.market) markets.add(r.market);
   });
+
   const sel=document.getElementById('marketFilter');
   sel.innerHTML='<option value="all">All markets</option>' + [...markets].sort().map(m=>`<option value="${m}">${m}</option>`).join('');
 }
@@ -735,40 +761,50 @@ function refreshMeta(sd,pd){
   document.getElementById('period-pill').innerHTML=period==='all'
     ?'<span class="complete-pill">Full history</span>'
     :`<span class="mtd-pill">${periodLabel}</span>`;
-  document.getElementById('markets-sub').textContent=(market==='all'
-    ?'Customer Support · Parts Administration'
-    :market+' · Customer Support · Parts Administration');
+
+  document.getElementById('markets-sub').textContent=(
+    market==='all'
+      ?'Customer Support · Parts Administration'
+      :market+' · Customer Support · Parts Administration'
+  );
 }
 
 function render(){
   const market=document.getElementById('marketFilter').value;
   const period=document.getElementById('periodFilter').value;
+
   const sd=filterData(supportData,market,period);
   const pd=filterData(partsData,market,period);
+
   refreshMeta(sd,pd);
   renderNorthStar(sd);
   renderOverview(sd,pd);
-  renderOSA(sd);
+  renderCS(sd);
   renderPA(pd);
 }
 
 function renderNorthStar(sd){
   const completed=dedupCompletedJobs(sd);
   const repeat=sum(sd,'repeat_issues');
-  const rate=completed>0?Math.min(100,(completed/(completed+repeat))*100):null;
+  const rate=completed>0 ? Math.min(100,(completed/(completed+repeat))*100) : null;
+
   document.getElementById('nsValue').textContent=fmtPct(rate);
-  document.getElementById('nsValue').style.color=rate>=92?COLORS.teal:rate>=85?COLORS.amber:COLORS.coral;
+  document.getElementById('nsValue').style.color=
+    rate>=92 ? COLORS.teal :
+    rate>=85 ? COLORS.amber :
+    COLORS.coral;
 }
 
 function renderOverview(sd,pd){
   const totalIssues=sum(sd,'total_issues');
   const completed=dedupCompletedJobs(sd);
-  const issuesPerJob=completed>0?totalIssues/completed:null;
-  const resolvedRate=totalIssues>0?(sum(sd,'resolved_issues')/totalIssues)*100:null;
-  const repeatRate=totalIssues>0?(sum(sd,'repeat_issues')/totalIssues)*100:null;
+  const issuesPerJob=completed>0 ? totalIssues/completed : null;
+  const resolvedRate=totalIssues>0 ? (sum(sd,'resolved_issues')/totalIssues)*100 : null;
+  const repeatRate=totalIssues>0 ? (sum(sd,'repeat_issues')/totalIssues)*100 : null;
+
   const totalJobs=sum(pd,'total_jobs');
   const jobsWithIssue=sum(pd,'jobs_with_issue');
-  const partsAccuracy=totalJobs>0?(1-jobsWithIssue/totalJobs)*100:null;
+  const partsAccuracy=totalJobs>0 ? (1-jobsWithIssue/totalJobs)*100 : null;
 
   document.getElementById('overview-scorecards').innerHTML=
     scorecard('CS issues / job', issuesPerJob!=null?fmt(issuesPerJob,3):'—', statusMeta(issuesPerJob,0.5,'lower').label, statusMeta(issuesPerJob,0.5,'lower').badge, COLORS.teal, true) +
@@ -778,7 +814,7 @@ function renderOverview(sd,pd){
 
   renderIssuesTrend(sd,'chartIssuesPerJob');
   renderPartsAccuracyTrend(pd,'chartPartsAccuracy');
-  renderOverviewOsaTable(sd);
+  renderOverviewCSTable(sd);
   renderOverviewPaTable(pd);
 }
 
@@ -790,16 +826,16 @@ function scorecard(label,value,status,badge,accent,primary=false){
   </div>`;
 }
 
-function renderOSA(sd){
+function renderCS(sd){
   const totalIssues=sum(sd,'total_issues');
   const resolved=sum(sd,'resolved_issues');
   const repeat=sum(sd,'repeat_issues');
   const completed=dedupCompletedJobs(sd);
-  const issuesPerJob=completed>0?totalIssues/completed:null;
-  const repeatRate=totalIssues>0?(repeat/totalIssues)*100:null;
-  const resolvedRate=totalIssues>0?(resolved/totalIssues)*100:null;
+  const issuesPerJob=completed>0 ? totalIssues/completed : null;
+  const repeatRate=totalIssues>0 ? (repeat/totalIssues)*100 : null;
+  const resolvedRate=totalIssues>0 ? (resolved/totalIssues)*100 : null;
 
-  document.getElementById('osa-scorecards').innerHTML=
+  document.getElementById('CS-scorecards').innerHTML=
     scorecard('Issues / completed job', issuesPerJob!=null?fmt(issuesPerJob,3):'—', statusMeta(issuesPerJob,0.5,'lower').label, statusMeta(issuesPerJob,0.5,'lower').badge, COLORS.teal, true)+
     scorecard('Repeat issue rate', fmtPct(repeatRate), statusMeta(repeatRate,15,'lower').label, statusMeta(repeatRate,15,'lower').badge, COLORS.amber)+
     scorecard('Resolved rate', fmtPct(resolvedRate), statusMeta(resolvedRate,85,'higher').label, statusMeta(resolvedRate,85,'higher').badge, COLORS.blue)+
@@ -815,8 +851,8 @@ function renderOSA(sd){
 function renderPA(pd){
   const totalJobs=sum(pd,'total_jobs');
   const jobsWithIssue=sum(pd,'jobs_with_issue');
-  const issueRate=totalJobs>0?(jobsWithIssue/totalJobs)*100:null;
-  const accuracy=issueRate!=null?100-issueRate:null;
+  const issueRate=totalJobs>0 ? (jobsWithIssue/totalJobs)*100 : null;
+  const accuracy=issueRate!=null ? 100-issueRate : null;
 
   document.getElementById('pa-scorecards').innerHTML=
     scorecard('Parts accuracy rate', fmtPct(accuracy), statusMeta(accuracy,95,'higher').label, statusMeta(accuracy,95,'higher').badge, COLORS.purple, true)+
@@ -872,7 +908,7 @@ function renderResolvedRepeat(sd,id){
           data:months.map(m=>{
             const rows=byMonth[m];
             const t=sum(rows,'total_issues');
-            return t>0?+((sum(rows,'resolved_issues')/t)*100).toFixed(1):0;
+            return t>0 ? +((sum(rows,'resolved_issues')/t)*100).toFixed(1) : 0;
           }),
           borderColor:COLORS.blue,
           backgroundColor:COLORS.blueA,
@@ -886,7 +922,7 @@ function renderResolvedRepeat(sd,id){
           data:months.map(m=>{
             const rows=byMonth[m];
             const t=sum(rows,'total_issues');
-            return t>0?+((sum(rows,'repeat_issues')/t)*100).toFixed(1):0;
+            return t>0 ? +((sum(rows,'repeat_issues')/t)*100).toFixed(1) : 0;
           }),
           borderColor:COLORS.amber,
           backgroundColor:COLORS.amberA,
@@ -1048,7 +1084,7 @@ function renderMarketTable(sd){
   }).join(''):'<tr><td colspan="8" class="empty">No data for selected filters.</td></tr>';
 }
 
-function renderOverviewOsaTable(sd){
+function renderOverviewCSTable(sd){
   const grouped=groupByResolvedKey(sd,['market','Market']);
   const completedByMarket=dedupCompletedJobsByMarket(sd);
 
@@ -1069,7 +1105,7 @@ function renderOverviewOsaTable(sd){
     .sort((a,b)=>b.issuesPerJob-a.issuesPerJob)
     .slice(0,8);
 
-  document.getElementById('overviewOsaTable').innerHTML=rows.length?rows.map(r=>`
+  document.getElementById('overviewCSTable').innerHTML=rows.length?rows.map(r=>`
     <tr class="dr ${statusMeta(r.issuesPerJob,0.5,'lower').row}">
       <td>${r.m}</td>
       <td class="tr">${fmtK(r.total)}</td>
@@ -1094,7 +1130,7 @@ function renderPartsAccuracyTrend(pd,id){
             const d=byMonth[m];
             const t=sum(d,'total_jobs');
             const i=sum(d,'jobs_with_issue');
-            return t>0?+((1-i/t)*100).toFixed(1):0;
+            return t>0 ? +((1-i/t)*100).toFixed(1) : 0;
           }),
           borderColor:COLORS.purple,
           backgroundColor:COLORS.purpleA,
