@@ -178,7 +178,7 @@ tr.dr:hover td{filter:brightness(.985)}
 <div class="app">
   <div class="app__container">
     <header class="page-header">
-      <h1 class="page-title">NuBrakes OSA &amp; PA Performance Dashboard</h1>
+      <h1 class="page-title">NuBrakes CS &amp; PA Performance Dashboard</h1>
       <p class="page-subtitle" id="markets-sub">Customer Support · Parts Administration</p>
       <div class="status-row">
         <span class="status-pill" id="status-pill">
@@ -191,7 +191,7 @@ tr.dr:hover td{filter:brightness(.985)}
 
     <div class="tabs">
       <button class="tabs__btn is-active" onclick="sw('overview', this)">Overview</button>
-      <button class="tabs__btn" onclick="sw('osa', this)">CS metrics</button>
+      <button class="tabs__btn" onclick="sw('CS', this)">CS metrics</button>
       <button class="tabs__btn" onclick="sw('pa', this)">PA metrics</button>
     </div>
 
@@ -271,9 +271,9 @@ tr.dr:hover td{filter:brightness(.985)}
                 <th class="tr">Issues / Job</th>
               </tr>
             </thead>
-            <tbody id="overviewOsaTable"></tbody>
+            <tbody id="overviewCSTable"></tbody>
           </table>
-          <div class="foot">OSA view highlights ticket burden and resolution quality by market.</div>
+          <div class="foot">CS view highlights ticket burden and resolution quality by market.</div>
         </div>
         <div class="panel">
           <div class="ph">
@@ -299,8 +299,8 @@ tr.dr:hover td{filter:brightness(.985)}
       </div>
     </div>
 
-    <!-- OSA -->
-    <div class="pg" id="pg-osa">
+    <!-- CS -->
+    <div class="pg" id="pg-CS">
       <div class="topbar">
         <div class="month-wrap">
           <span class="section-pill">Customer Support</span>
@@ -308,7 +308,7 @@ tr.dr:hover td{filter:brightness(.985)}
         <div class="dr-label">CS performance view</div>
       </div>
 
-      <div class="mrow" id="osa-scorecards"></div>
+      <div class="mrow" id="CS-scorecards"></div>
 
       <div class="two-col">
         <div class="panel">
@@ -453,9 +453,20 @@ const SUPPORT_URL='https://raw.githubusercontent.com/nubrakes-analytics/NuBrakes
 const PARTS_URL='https://raw.githubusercontent.com/nubrakes-analytics/NuBrakes-Copilot/main/data/fact_nubrakes_reason_parts_daily.json';
 
 const COLORS={
-  teal:'#1d9e75', blue:'#378add', amber:'#ef9f27', coral:'#d85a30', purple:'#7f77dd', green:'#97c459', red:'#e24b4a',
-  tealA:'rgba(29,158,117,0.16)', blueA:'rgba(55,138,221,0.16)', amberA:'rgba(239,159,39,0.16)', coralA:'rgba(216,90,48,0.16)', purpleA:'rgba(127,119,221,0.16)',
-  grid:'#e5e7eb', text:'#6b7280'
+  teal:'#1d9e75',
+  blue:'#378add',
+  amber:'#ef9f27',
+  coral:'#d85a30',
+  purple:'#7f77dd',
+  green:'#97c459',
+  red:'#e24b4a',
+  tealA:'rgba(29,158,117,0.16)',
+  blueA:'rgba(55,138,221,0.16)',
+  amberA:'rgba(239,159,39,0.16)',
+  coralA:'rgba(216,90,48,0.16)',
+  purpleA:'rgba(127,119,221,0.16)',
+  grid:'#e5e7eb',
+  text:'#6b7280'
 };
 
 let supportData=[];
@@ -466,29 +477,118 @@ const chartDefaults={
   responsive:true,
   maintainAspectRatio:false,
   interaction:{mode:'index',intersect:false},
-  plugins:{legend:{display:false},tooltip:{backgroundColor:'#111827',titleColor:'#fff',bodyColor:'#e5e7eb',padding:10,borderColor:'#1f2937',borderWidth:1}},
+  plugins:{
+    legend:{display:false},
+    tooltip:{
+      backgroundColor:'#111827',
+      titleColor:'#fff',
+      bodyColor:'#e5e7eb',
+      padding:10,
+      borderColor:'#1f2937',
+      borderWidth:1
+    }
+  },
   scales:{
-    x:{grid:{display:false},ticks:{color:COLORS.text,font:{family:"'DM Mono', monospace",size:10}}},
-    y:{grid:{color:COLORS.grid},ticks:{color:COLORS.text,font:{family:"'DM Mono', monospace",size:10}},beginAtZero:true}
+    x:{
+      grid:{display:false},
+      ticks:{color:COLORS.text,font:{family:"'DM Mono', monospace",size:10}}
+    },
+    y:{
+      grid:{color:COLORS.grid},
+      ticks:{color:COLORS.text,font:{family:"'DM Mono', monospace",size:10}},
+      beginAtZero:true
+    }
   }
 };
 
 function sw(key, btn){
   document.querySelectorAll('.tabs__btn').forEach(b=>b.classList.remove('is-active'));
   if(btn) btn.classList.add('is-active');
-  ['overview','osa','pa'].forEach(k=>document.getElementById('pg-'+k).classList.toggle('on',k===key));
+  ['overview','CS','pa'].forEach(k=>document.getElementById('pg-'+k).classList.toggle('on',k===key));
 }
 
 function setLoading(msg){document.getElementById('loading-text').textContent=msg}
 function hideLoading(){document.getElementById('loading-overlay').style.display='none'}
-function showError(msg){const el=document.getElementById('errorBanner');el.style.display='block';el.textContent=msg;document.getElementById('status-pill').className='status-pill status-pill--danger';document.getElementById('ds-pill').textContent='Data error'}
+function showError(msg){
+  const el=document.getElementById('errorBanner');
+  el.style.display='block';
+  el.textContent=msg;
+  document.getElementById('status-pill').className='status-pill status-pill--danger';
+  document.getElementById('ds-pill').textContent='Data error';
+}
 function fmt(n,d=2){return n==null||isNaN(n)?'—':Number(n).toFixed(d)}
 function fmtPct(n){return n==null||isNaN(n)?'—':Number(n).toFixed(1)+'%'}
 function fmtK(n){if(n==null||isNaN(n))return '—';return Math.abs(n)>=1000?(n/1000).toFixed(1)+'K':Math.round(n).toString()}
 function sum(arr,key){return arr.reduce((s,r)=>s+(parseFloat(r[key])||0),0)}
-function groupBy(data,key){return data.reduce((a,r)=>{const k=r[key]||'Unknown';(a[k]||(a[k]=[])).push(r);return a;}, {})}
-function groupByMonth(data,dayKey='Day'){return data.reduce((a,r)=>{const d=r[dayKey]||r.day||r.date;if(!d) return a; const m=String(d).slice(0,7); (a[m]||(a[m]=[])).push(r); return a;}, {})}
-function makeChart(id,config){ if(charts[id]) charts[id].destroy(); const el=document.getElementById(id); if(!el) return; charts[id]=new Chart(el,config); }
+
+function groupBy(data,key){
+  return data.reduce((a,r)=>{
+    const k=r[key]||'Unknown';
+    (a[k]||(a[k]=[])).push(r);
+    return a;
+  }, {});
+}
+
+function groupByResolvedKey(data, keys){
+  return data.reduce((acc, r) => {
+    const key = getFirstValue(r, keys) || 'Unknown';
+    (acc[key] || (acc[key] = [])).push(r);
+    return acc;
+  }, {});
+}
+
+function groupByMonth(data,dayKey='Day'){
+  return data.reduce((a,r)=>{
+    const d=r[dayKey]||r.day||r.date;
+    if(!d) return a;
+    const m=String(d).slice(0,7);
+    (a[m]||(a[m]=[])).push(r);
+    return a;
+  }, {});
+}
+
+function makeChart(id,config){
+  if(charts[id]) charts[id].destroy();
+  const el=document.getElementById(id);
+  if(!el) return;
+  charts[id]=new Chart(el,config);
+}
+
+function getFirstValue(obj, keys){
+  for(const key of keys){
+    const value = obj?.[key];
+    if(value !== undefined && value !== null && String(value).trim() !== ''){
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeSupportRow(r){
+  return {
+    ...r,
+    market:getFirstValue(r,['market','Market']),
+    Day:getFirstValue(r,['Day','day','date']),
+    issue_type:getFirstValue(r,['issue_type','issueType','Issue Type']),
+    total_issues:parseFloat(getFirstValue(r,['total_issues','totalIssues'])) || 0,
+    completed_jobs:parseFloat(getFirstValue(r,['completed_jobs','completedJobs'])) || 0,
+    repeat_issues:parseFloat(getFirstValue(r,['repeat_issues','repeatIssues'])) || 0,
+    resolved_issues:parseFloat(getFirstValue(r,['resolved_issues','resolvedIssues'])) || 0
+  };
+}
+
+function normalizePartsRow(r){
+  return {
+    ...r,
+    market:getFirstValue(r,['market','Market']),
+    Day:getFirstValue(r,['Day','day','date']),
+    cancellation_reason:getFirstValue(r,['cancellation_reason','cancellationReason']),
+    supplier:getFirstValue(r,['supplier','Supplier']),
+    agent:getFirstValue(r,['agent','Agent']),
+    total_jobs:parseFloat(getFirstValue(r,['total_jobs','totalJobs'])) || 0,
+    jobs_with_issue:parseFloat(getFirstValue(r,['jobs_with_issue','jobsWithIssue'])) || 0
+  };
+}
 
 function statusMeta(val,target,dir='lower'){
   if(val==null||isNaN(val)) return {badge:'bt',label:'No data',row:''};
@@ -504,34 +604,49 @@ function statusMeta(val,target,dir='lower'){
 
 function filterData(data,market,period){
   let d=[...data];
-  if(market!=='all') d=d.filter(r=>(r.market||r.Market)===market);
+  if(market!=='all') d=d.filter(r=>r.market===market);
   if(period!=='all'){
     const now=new Date();
     const days=period==='last30'?30:90;
     const cutoff=new Date(now.getTime()-days*86400000);
-    d=d.filter(r=>{ const day=r.Day||r.day||r.date; return day && new Date(day)>=cutoff; });
+    d=d.filter(r=>{
+      const day=r.Day||r.day||r.date;
+      return day && new Date(day)>=cutoff;
+    });
   }
   return d;
 }
 
 function populateFilters(){
   const markets=new Set();
-  [...supportData,...partsData].forEach(r=>{ if(r.market) markets.add(r.market); if(r.Market) markets.add(r.Market); });
+  [...supportData,...partsData].forEach(r=>{
+    if(r.market) markets.add(r.market);
+  });
   const sel=document.getElementById('marketFilter');
   sel.innerHTML='<option value="all">All markets</option>' + [...markets].sort().map(m=>`<option value="${m}">${m}</option>`).join('');
 }
 
 function refreshMeta(sd,pd){
-  const lastDay=[...supportData.map(r=>r.Day||r.day||r.date),...partsData.map(r=>r.Day||r.day||r.date)].filter(Boolean).sort().pop();
+  const lastDay=[...supportData.map(r=>r.Day||r.day||r.date),...partsData.map(r=>r.Day||r.day||r.date)]
+    .filter(Boolean)
+    .sort()
+    .pop();
+
   document.getElementById('ulbl').textContent=lastDay?`Data through ${lastDay}`:'Data loaded';
   document.getElementById('ds-pill').textContent='Live data';
   document.getElementById('status-pill').className='status-pill';
+
   const market=document.getElementById('marketFilter').value;
   const period=document.getElementById('periodFilter').value;
   const periodLabel=period==='last30'?'Last 30 days':period==='last90'?'Last 90 days':'All time';
+
   document.getElementById('dr-lbl').textContent=`${periodLabel} · ${market==='all'?'All markets':market}`;
-  document.getElementById('period-pill').innerHTML=period==='all'?'<span class="complete-pill">Full history</span>':`<span class="mtd-pill">${periodLabel}</span>`;
-  document.getElementById('markets-sub').textContent=(market==='all'?'Customer Support · Parts Administration':market+' · Customer Support · Parts Administration');
+  document.getElementById('period-pill').innerHTML=period==='all'
+    ?'<span class="complete-pill">Full history</span>'
+    :`<span class="mtd-pill">${periodLabel}</span>`;
+  document.getElementById('markets-sub').textContent=(market==='all'
+    ?'Customer Support · Parts Administration'
+    :market+' · Customer Support · Parts Administration');
 }
 
 function render(){
@@ -542,7 +657,7 @@ function render(){
   refreshMeta(sd,pd);
   renderNorthStar(sd);
   renderOverview(sd,pd);
-  renderOSA(sd);
+  renderCS(sd);
   renderPA(pd);
 }
 
@@ -572,15 +687,19 @@ function renderOverview(sd,pd){
 
   renderIssuesTrend(sd,'chartIssuesPerJob');
   renderPartsAccuracyTrend(pd,'chartPartsAccuracy');
-  renderOverviewOsaTable(sd);
+  renderOverviewCSTable(sd);
   renderOverviewPaTable(pd);
 }
 
 function scorecard(label,value,status,badge,accent,primary=false){
-  return `<div class="mc ${primary?'primary':''}" style="--accent:${accent}"><div class="ml">${label}</div><div class="mv">${value}</div><div class="ms"><span class="b ${badge}">${status}</span></div></div>`;
+  return `<div class="mc ${primary?'primary':''}" style="--accent:${accent}">
+    <div class="ml">${label}</div>
+    <div class="mv">${value}</div>
+    <div class="ms"><span class="b ${badge}">${status}</span></div>
+  </div>`;
 }
 
-function renderOSA(sd){
+function renderCS(sd){
   const totalIssues=sum(sd,'total_issues');
   const resolved=sum(sd,'resolved_issues');
   const repeat=sum(sd,'repeat_issues');
@@ -589,7 +708,7 @@ function renderOSA(sd){
   const repeatRate=totalIssues>0?(repeat/totalIssues)*100:null;
   const resolvedRate=totalIssues>0?(resolved/totalIssues)*100:null;
 
-  document.getElementById('osa-scorecards').innerHTML=
+  document.getElementById('CS-scorecards').innerHTML=
     scorecard('Issues / completed job', issuesPerJob!=null?fmt(issuesPerJob,3):'—', statusMeta(issuesPerJob,0.5,'lower').label, statusMeta(issuesPerJob,0.5,'lower').badge, COLORS.teal, true)+
     scorecard('Repeat issue rate', fmtPct(repeatRate), statusMeta(repeatRate,15,'lower').label, statusMeta(repeatRate,15,'lower').badge, COLORS.amber)+
     scorecard('Resolved rate', fmtPct(resolvedRate), statusMeta(resolvedRate,85,'higher').label, statusMeta(resolvedRate,85,'higher').badge, COLORS.blue)+
@@ -623,51 +742,199 @@ function renderPA(pd){
 function renderIssuesTrend(sd,id){
   const byMonth=groupByMonth(sd,'Day');
   const months=Object.keys(byMonth).sort();
-  makeChart(id,{type:'line',data:{labels:months,datasets:[{data:months.map(m=>{const rows=byMonth[m]; const i=sum(rows,'total_issues'); const j=sum(rows,'completed_jobs'); return j>0?+(i/j).toFixed(3):0}),borderColor:COLORS.teal,backgroundColor:COLORS.tealA,fill:true,tension:.35,borderWidth:2,pointRadius:3}]},options:chartDefaults});
+
+  makeChart(id,{
+    type:'line',
+    data:{
+      labels:months,
+      datasets:[{
+        data:months.map(m=>{
+          const rows=byMonth[m];
+          const i=sum(rows,'total_issues');
+          const j=sum(rows,'completed_jobs');
+          return j>0?+(i/j).toFixed(3):0;
+        }),
+        borderColor:COLORS.teal,
+        backgroundColor:COLORS.tealA,
+        fill:true,
+        tension:.35,
+        borderWidth:2,
+        pointRadius:3
+      }]
+    },
+    options:chartDefaults
+  });
 }
 
 function renderResolvedRepeat(sd,id){
   const byMonth=groupByMonth(sd,'Day');
   const months=Object.keys(byMonth).sort();
-  makeChart(id,{type:'line',data:{labels:months,datasets:[
-    {label:'Resolved',data:months.map(m=>{const rows=byMonth[m]; const t=sum(rows,'total_issues'); return t>0?+((sum(rows,'resolved_issues')/t)*100).toFixed(1):0}),borderColor:COLORS.blue,backgroundColor:COLORS.blueA,fill:false,tension:.35,borderWidth:2,pointRadius:3},
-    {label:'Repeat',data:months.map(m=>{const rows=byMonth[m]; const t=sum(rows,'total_issues'); return t>0?+((sum(rows,'repeat_issues')/t)*100).toFixed(1):0}),borderColor:COLORS.amber,backgroundColor:COLORS.amberA,fill:false,tension:.35,borderWidth:2,pointRadius:3,borderDash:[5,4]}
-  ]},options:{...chartDefaults,scales:{...chartDefaults.scales,y:{...chartDefaults.scales.y,max:100,ticks:{...chartDefaults.scales.y.ticks,callback:v=>v+'%'}}}}});
+
+  makeChart(id,{
+    type:'line',
+    data:{
+      labels:months,
+      datasets:[
+        {
+          label:'Resolved',
+          data:months.map(m=>{
+            const rows=byMonth[m];
+            const t=sum(rows,'total_issues');
+            return t>0?+((sum(rows,'resolved_issues')/t)*100).toFixed(1):0;
+          }),
+          borderColor:COLORS.blue,
+          backgroundColor:COLORS.blueA,
+          fill:false,
+          tension:.35,
+          borderWidth:2,
+          pointRadius:3
+        },
+        {
+          label:'Repeat',
+          data:months.map(m=>{
+            const rows=byMonth[m];
+            const t=sum(rows,'total_issues');
+            return t>0?+((sum(rows,'repeat_issues')/t)*100).toFixed(1):0;
+          }),
+          borderColor:COLORS.amber,
+          backgroundColor:COLORS.amberA,
+          fill:false,
+          tension:.35,
+          borderWidth:2,
+          pointRadius:3,
+          borderDash:[5,4]
+        }
+      ]
+    },
+    options:{
+      ...chartDefaults,
+      scales:{
+        ...chartDefaults.scales,
+        y:{
+          ...chartDefaults.scales.y,
+          max:100,
+          ticks:{
+            ...chartDefaults.scales.y.ticks,
+            callback:v=>v+'%'
+          }
+        }
+      }
+    }
+  });
 }
 
 function renderIssueType(sd,id){
-  const grouped=groupBy(sd,'issue_type');
+  const grouped=groupByResolvedKey(sd,['issue_type','issueType','Issue Type']);
   const labels=Object.keys(grouped).filter(k=>k && k!=='Unknown' && k!=='null').slice(0,8);
-  if(!labels.length){ document.getElementById(id).parentElement.innerHTML='<div class="empty">No issue type data available.</div>'; return; }
-  makeChart(id,{type:'doughnut',data:{labels,datasets:[{data:labels.map(l=>sum(grouped[l],'total_issues')),backgroundColor:[COLORS.teal,COLORS.blue,COLORS.amber,COLORS.coral,COLORS.purple,COLORS.green,COLORS.red,'#94a3b8'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:true,position:'right',labels:{color:COLORS.text,boxWidth:10,font:{size:11}}},tooltip:chartDefaults.plugins.tooltip}}});
+
+  const canvas=document.getElementById(id);
+  if(!labels.length){
+    if(charts[id]) charts[id].destroy();
+    if(canvas?.parentElement) canvas.parentElement.innerHTML='<div class="empty">No issue type data available.</div>';
+    return;
+  }
+
+  makeChart(id,{
+    type:'doughnut',
+    data:{
+      labels,
+      datasets:[{
+        data:labels.map(l=>sum(grouped[l],'total_issues')),
+        backgroundColor:[COLORS.teal,COLORS.blue,COLORS.amber,COLORS.coral,COLORS.purple,COLORS.green,COLORS.red,'#94a3b8'],
+        borderWidth:0
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      cutout:'65%',
+      plugins:{
+        legend:{
+          display:true,
+          position:'right',
+          labels:{color:COLORS.text,boxWidth:10,font:{size:11}}
+        },
+        tooltip:chartDefaults.plugins.tooltip
+      }
+    }
+  });
 }
 
 function renderMarketChart(sd,id){
-  const grouped=groupBy(sd,'market');
-  const rows=Object.keys(grouped).filter(k=>k && k!=='Unknown').map(m=>{const d=grouped[m]; const i=sum(d,'total_issues'); const j=sum(d,'completed_jobs'); return {m,v:j>0?+(i/j).toFixed(3):0};}).sort((a,b)=>b.v-a.v);
-  const wrap=document.getElementById('issuesByMarketWrap'); if(wrap) wrap.style.height=Math.max(280, rows.length*30+60)+'px';
-  makeChart(id,{type:'bar',data:{labels:rows.map(r=>r.m),datasets:[{data:rows.map(r=>r.v),backgroundColor:rows.map(r=>r.v>1?COLORS.coral:r.v>.5?COLORS.amber:COLORS.teal),borderRadius:6,barThickness:16}]},options:{...chartDefaults,indexAxis:'y',scales:{x:{...chartDefaults.scales.x},y:{...chartDefaults.scales.y,ticks:{...chartDefaults.scales.y.ticks,autoSkip:false}}}}});
+  const grouped=groupByResolvedKey(sd,['market','Market']);
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(m=>{
+      const d=grouped[m];
+      const i=sum(d,'total_issues');
+      const j=sum(d,'completed_jobs');
+      return {m,v:j>0?+(i/j).toFixed(3):0};
+    })
+    .sort((a,b)=>b.v-a.v);
+
+  const wrap=document.getElementById('issuesByMarketWrap');
+  if(wrap) wrap.style.height=Math.max(280, rows.length*30+60)+'px';
+
+  if(!rows.length){
+    if(charts[id]) charts[id].destroy();
+    if(wrap) wrap.innerHTML='<div class="empty">No market data available.</div>';
+    return;
+  }
+
+  if(wrap && !document.getElementById(id)){
+    wrap.innerHTML='<canvas id="chartMarket"></canvas>';
+  }
+
+  makeChart(id,{
+    type:'bar',
+    data:{
+      labels:rows.map(r=>r.m),
+      datasets:[{
+        data:rows.map(r=>r.v),
+        backgroundColor:rows.map(r=>r.v>1?COLORS.coral:r.v>.5?COLORS.amber:COLORS.teal),
+        borderRadius:6,
+        barThickness:16
+      }]
+    },
+    options:{
+      ...chartDefaults,
+      indexAxis:'y',
+      scales:{
+        x:{...chartDefaults.scales.x},
+        y:{
+          ...chartDefaults.scales.y,
+          ticks:{
+            ...chartDefaults.scales.y.ticks,
+            autoSkip:false
+          }
+        }
+      }
+    }
+  });
 }
 
 function renderMarketTable(sd){
-  const grouped=groupBy(sd,'market');
-  const rows=Object.keys(grouped).filter(k=>k && k!=='Unknown').map(m=>{
-    const d=grouped[m];
-    const t=sum(d,'total_issues');
-    const r=sum(d,'resolved_issues');
-    const rep=sum(d,'repeat_issues');
-    const j=sum(d,'completed_jobs');
-    return {
-      m,
-      total:t,
-      resolved:r,
-      resolvedRate:t>0?(r/t)*100:0,
-      repeat:rep,
-      repeatRate:t>0?(rep/t)*100:0,
-      jobs:j,
-      issuesPerJob:j>0?t/j:0
-    };
-  }).sort((a,b)=>b.issuesPerJob-a.issuesPerJob);
+  const grouped=groupByResolvedKey(sd,['market','Market']);
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(m=>{
+      const d=grouped[m];
+      const t=sum(d,'total_issues');
+      const r=sum(d,'resolved_issues');
+      const rep=sum(d,'repeat_issues');
+      const j=sum(d,'completed_jobs');
+      return {
+        m,
+        total:t,
+        resolved:r,
+        resolvedRate:t>0?(r/t)*100:0,
+        repeat:rep,
+        repeatRate:t>0?(rep/t)*100:0,
+        jobs:j,
+        issuesPerJob:j>0?t/j:0
+      };
+    })
+    .sort((a,b)=>b.issuesPerJob-a.issuesPerJob);
 
   const body=document.getElementById('marketTableBody');
   body.innerHTML=rows.length?rows.map(r=>{
@@ -685,22 +952,26 @@ function renderMarketTable(sd){
   }).join(''):'<tr><td colspan="8" class="empty">No data for selected filters.</td></tr>';
 }
 
-function renderOverviewOsaTable(sd){
-  const grouped=groupBy(sd,'market');
-  const rows=Object.keys(grouped).filter(Boolean).map(m=>{
-    const d=grouped[m];
-    const t=sum(d,'total_issues');
-    const j=sum(d,'completed_jobs');
-    return {
-      m,
-      total:t,
-      resolvedRate:t>0?(sum(d,'resolved_issues')/t)*100:0,
-      repeatRate:t>0?(sum(d,'repeat_issues')/t)*100:0,
-      issuesPerJob:j>0?t/j:0
-    };
-  }).sort((a,b)=>b.issuesPerJob-a.issuesPerJob).slice(0,8);
+function renderOverviewCSTable(sd){
+  const grouped=groupByResolvedKey(sd,['market','Market']);
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(m=>{
+      const d=grouped[m];
+      const t=sum(d,'total_issues');
+      const j=sum(d,'completed_jobs');
+      return {
+        m,
+        total:t,
+        resolvedRate:t>0?(sum(d,'resolved_issues')/t)*100:0,
+        repeatRate:t>0?(sum(d,'repeat_issues')/t)*100:0,
+        issuesPerJob:j>0?t/j:0
+      };
+    })
+    .sort((a,b)=>b.issuesPerJob-a.issuesPerJob)
+    .slice(0,8);
 
-  document.getElementById('overviewOsaTable').innerHTML=rows.length?rows.map(r=>`
+  document.getElementById('overviewCSTable').innerHTML=rows.length?rows.map(r=>`
     <tr class="dr ${statusMeta(r.issuesPerJob,0.5,'lower').row}">
       <td>${r.m}</td>
       <td class="tr">${fmtK(r.total)}</td>
@@ -714,46 +985,205 @@ function renderOverviewOsaTable(sd){
 function renderPartsAccuracyTrend(pd,id){
   const byMonth=groupByMonth(pd,'Day');
   const months=Object.keys(byMonth).sort();
-  makeChart(id,{type:'line',data:{labels:months,datasets:[{data:months.map(m=>{const d=byMonth[m]; const t=sum(d,'total_jobs'); const i=sum(d,'jobs_with_issue'); return t>0?+((1-i/t)*100).toFixed(1):0}),borderColor:COLORS.purple,backgroundColor:COLORS.purpleA,fill:true,tension:.35,borderWidth:2,pointRadius:3},{data:months.map(()=>95),borderColor:'#94a3b8',borderDash:[5,4],borderWidth:1.5,fill:false,pointRadius:0}]},options:{...chartDefaults,scales:{...chartDefaults.scales,y:{...chartDefaults.scales.y,max:100,ticks:{...chartDefaults.scales.y.ticks,callback:v=>v+'%'}}}}});
+
+  makeChart(id,{
+    type:'line',
+    data:{
+      labels:months,
+      datasets:[
+        {
+          data:months.map(m=>{
+            const d=byMonth[m];
+            const t=sum(d,'total_jobs');
+            const i=sum(d,'jobs_with_issue');
+            return t>0?+((1-i/t)*100).toFixed(1):0;
+          }),
+          borderColor:COLORS.purple,
+          backgroundColor:COLORS.purpleA,
+          fill:true,
+          tension:.35,
+          borderWidth:2,
+          pointRadius:3
+        },
+        {
+          data:months.map(()=>95),
+          borderColor:'#94a3b8',
+          borderDash:[5,4],
+          borderWidth:1.5,
+          fill:false,
+          pointRadius:0
+        }
+      ]
+    },
+    options:{
+      ...chartDefaults,
+      scales:{
+        ...chartDefaults.scales,
+        y:{
+          ...chartDefaults.scales.y,
+          max:100,
+          ticks:{
+            ...chartDefaults.scales.y.ticks,
+            callback:v=>v+'%'
+          }
+        }
+      }
+    }
+  });
 }
 
 function renderPartsReason(pd,id){
-  const grouped=groupBy(pd,'cancellation_reason');
-  const rows=Object.keys(grouped).filter(k=>k && k!=='Unknown' && k!=='null').map(r=>{const d=grouped[r]; const t=sum(d,'total_jobs'); const i=sum(d,'jobs_with_issue'); return {r,v:t>0?+((i/t)*100).toFixed(1):0};}).sort((a,b)=>b.v-a.v).slice(0,10);
-  const wrap=document.getElementById('partsReasonWrap'); if(wrap) wrap.style.height=Math.max(280, rows.length*30+60)+'px';
-  makeChart(id,{type:'bar',data:{labels:rows.map(x=>x.r.length>28?x.r.slice(0,28)+'…':x.r),datasets:[{data:rows.map(x=>x.v),backgroundColor:rows.map(x=>x.v>20?COLORS.coral:x.v>10?COLORS.amber:COLORS.purple),borderRadius:6,barThickness:16}]},options:{...chartDefaults,indexAxis:'y',scales:{x:{...chartDefaults.scales.x,ticks:{...chartDefaults.scales.x.ticks,callback:v=>v+'%'}},y:{...chartDefaults.scales.y,ticks:{...chartDefaults.scales.y.ticks,autoSkip:false}}}}});
+  const grouped=groupByResolvedKey(pd,['cancellation_reason','cancellationReason']);
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(r=>{
+      const d=grouped[r];
+      const t=sum(d,'total_jobs');
+      const i=sum(d,'jobs_with_issue');
+      return {r,v:t>0?+((i/t)*100).toFixed(1):0};
+    })
+    .sort((a,b)=>b.v-a.v)
+    .slice(0,10);
+
+  const wrap=document.getElementById('partsReasonWrap');
+  if(wrap) wrap.style.height=Math.max(280, rows.length*30+60)+'px';
+
+  if(!rows.length){
+    if(charts[id]) charts[id].destroy();
+    if(wrap) wrap.innerHTML='<div class="empty">No cancellation reason data available.</div>';
+    return;
+  }
+
+  if(wrap && !document.getElementById(id)){
+    wrap.innerHTML='<canvas id="chartPartsReason"></canvas>';
+  }
+
+  makeChart(id,{
+    type:'bar',
+    data:{
+      labels:rows.map(x=>x.r.length>28?x.r.slice(0,28)+'…':x.r),
+      datasets:[{
+        data:rows.map(x=>x.v),
+        backgroundColor:rows.map(x=>x.v>20?COLORS.coral:x.v>10?COLORS.amber:COLORS.purple),
+        borderRadius:6,
+        barThickness:16
+      }]
+    },
+    options:{
+      ...chartDefaults,
+      indexAxis:'y',
+      scales:{
+        x:{
+          ...chartDefaults.scales.x,
+          ticks:{
+            ...chartDefaults.scales.x.ticks,
+            callback:v=>v+'%'
+          }
+        },
+        y:{
+          ...chartDefaults.scales.y,
+          ticks:{
+            ...chartDefaults.scales.y.ticks,
+            autoSkip:false
+          }
+        }
+      }
+    }
+  });
 }
 
 function renderSupplierTable(pd){
-  const grouped=groupBy(pd,'supplier');
-  const rows=Object.keys(grouped).filter(k=>k && k!=='Unknown' && k!=='null').map(s=>{const d=grouped[s]; const t=sum(d,'total_jobs'); const i=sum(d,'jobs_with_issue'); const rate=t>0?(i/t)*100:0; return {s,total:t,issues:i,rate,acc:100-rate};}).sort((a,b)=>b.rate-a.rate).slice(0,15);
-  document.getElementById('supplierTableBody').innerHTML=rows.length?rows.map(r=>`<tr class="dr ${statusMeta(r.rate,5,'lower').row}"><td>${r.s}</td><td class="tr">${fmtK(r.total)}</td><td class="tr">${fmtK(r.issues)}</td><td class="tr"><span class="b ${statusMeta(r.rate,5,'lower').badge}">${fmtPct(r.rate)}</span></td><td class="tr"><span class="b ${statusMeta(r.acc,95,'higher').badge}">${fmtPct(r.acc)}</span></td></tr>`).join(''):'<tr><td colspan="5" class="empty">No supplier data.</td></tr>';
+  const grouped=groupByResolvedKey(pd,['supplier','Supplier']);
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(s=>{
+      const d=grouped[s];
+      const t=sum(d,'total_jobs');
+      const i=sum(d,'jobs_with_issue');
+      const rate=t>0?(i/t)*100:0;
+      return {s,total:t,issues:i,rate,acc:100-rate};
+    })
+    .sort((a,b)=>b.rate-a.rate)
+    .slice(0,15);
+
+  document.getElementById('supplierTableBody').innerHTML=rows.length
+    ?rows.map(r=>`<tr class="dr ${statusMeta(r.rate,5,'lower').row}">
+        <td>${r.s}</td>
+        <td class="tr">${fmtK(r.total)}</td>
+        <td class="tr">${fmtK(r.issues)}</td>
+        <td class="tr"><span class="b ${statusMeta(r.rate,5,'lower').badge}">${fmtPct(r.rate)}</span></td>
+        <td class="tr"><span class="b ${statusMeta(r.acc,95,'higher').badge}">${fmtPct(r.acc)}</span></td>
+      </tr>`).join('')
+    :'<tr><td colspan="5" class="empty">No supplier data.</td></tr>';
 }
 
 function renderAgentTable(pd){
-  const grouped=groupBy(pd,'agent');
-  const rows=Object.keys(grouped).filter(k=>k && k!=='Unknown' && k!=='null').map(a=>{const d=grouped[a]; const t=sum(d,'total_jobs'); const i=sum(d,'jobs_with_issue'); const rate=t>0?(i/t)*100:0; return {a,total:t,issues:i,rate,acc:100-rate};}).sort((a,b)=>b.rate-a.rate).slice(0,15);
-  document.getElementById('agentTableBody').innerHTML=rows.length?rows.map(r=>`<tr class="dr ${statusMeta(r.rate,5,'lower').row}"><td>${r.a}</td><td class="tr">${fmtK(r.total)}</td><td class="tr">${fmtK(r.issues)}</td><td class="tr"><span class="b ${statusMeta(r.rate,5,'lower').badge}">${fmtPct(r.rate)}</span></td><td class="tr"><span class="b ${statusMeta(r.acc,95,'higher').badge}">${fmtPct(r.acc)}</span></td></tr>`).join(''):'<tr><td colspan="5" class="empty">No agent data.</td></tr>';
+  const grouped=groupByResolvedKey(pd,['agent','Agent']);
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(a=>{
+      const d=grouped[a];
+      const t=sum(d,'total_jobs');
+      const i=sum(d,'jobs_with_issue');
+      const rate=t>0?(i/t)*100:0;
+      return {a,total:t,issues:i,rate,acc:100-rate};
+    })
+    .sort((a,b)=>b.rate-a.rate)
+    .slice(0,15);
+
+  document.getElementById('agentTableBody').innerHTML=rows.length
+    ?rows.map(r=>`<tr class="dr ${statusMeta(r.rate,5,'lower').row}">
+        <td>${r.a}</td>
+        <td class="tr">${fmtK(r.total)}</td>
+        <td class="tr">${fmtK(r.issues)}</td>
+        <td class="tr"><span class="b ${statusMeta(r.rate,5,'lower').badge}">${fmtPct(r.rate)}</span></td>
+        <td class="tr"><span class="b ${statusMeta(r.acc,95,'higher').badge}">${fmtPct(r.acc)}</span></td>
+      </tr>`).join('')
+    :'<tr><td colspan="5" class="empty">No agent data.</td></tr>';
 }
 
 function renderOverviewPaTable(pd){
-  const grouped=groupBy(pd,'supplier');
-  const rows=Object.keys(grouped).filter(k=>k && k!=='Unknown' && k!=='null').map(s=>{const d=grouped[s]; const t=sum(d,'total_jobs'); const i=sum(d,'jobs_with_issue'); const rate=t>0?(i/t)*100:0; return {s,total:t,issues:i,rate,acc:100-rate};}).sort((a,b)=>b.rate-a.rate).slice(0,8);
-  document.getElementById('overviewPaTable').innerHTML=rows.length?rows.map(r=>`<tr class="dr ${statusMeta(r.rate,5,'lower').row}"><td>${r.s}</td><td class="tr">${fmtK(r.total)}</td><td class="tr">${fmtK(r.issues)}</td><td class="tr"><span class="b ${statusMeta(r.rate,5,'lower').badge}">${fmtPct(r.rate)}</span></td><td class="tr"><span class="b ${statusMeta(r.acc,95,'higher').badge}">${fmtPct(r.acc)}</span></td></tr>`).join(''):'<tr><td colspan="5" class="empty">No data.</td></tr>';
+  const grouped=groupByResolvedKey(pd,['supplier','Supplier']);
+  const rows=Object.keys(grouped)
+    .filter(k=>k && k!=='Unknown' && k!=='null')
+    .map(s=>{
+      const d=grouped[s];
+      const t=sum(d,'total_jobs');
+      const i=sum(d,'jobs_with_issue');
+      const rate=t>0?(i/t)*100:0;
+      return {s,total:t,issues:i,rate,acc:100-rate};
+    })
+    .sort((a,b)=>b.rate-a.rate)
+    .slice(0,8);
+
+  document.getElementById('overviewPaTable').innerHTML=rows.length
+    ?rows.map(r=>`<tr class="dr ${statusMeta(r.rate,5,'lower').row}">
+        <td>${r.s}</td>
+        <td class="tr">${fmtK(r.total)}</td>
+        <td class="tr">${fmtK(r.issues)}</td>
+        <td class="tr"><span class="b ${statusMeta(r.rate,5,'lower').badge}">${fmtPct(r.rate)}</span></td>
+        <td class="tr"><span class="b ${statusMeta(r.acc,95,'higher').badge}">${fmtPct(r.acc)}</span></td>
+      </tr>`).join('')
+    :'<tr><td colspan="5" class="empty">No data.</td></tr>';
 }
 
 async function init(){
   try{
     setLoading('Fetching live data…');
+
     const [r1,r2]=await Promise.all([fetch(SUPPORT_URL),fetch(PARTS_URL)]);
     if(!r1.ok || !r2.ok) throw new Error('Unable to fetch dataset');
+
     setLoading('Processing datasets…');
+
     const [d1,d2]=await Promise.all([r1.json(),r2.json()]);
-    supportData=Array.isArray(d1)?d1:(d1.data||[]);
-    partsData=Array.isArray(d2)?d2:(d2.data||[]);
+    supportData=(Array.isArray(d1)?d1:(d1.data||[])).map(normalizeSupportRow);
+    partsData=(Array.isArray(d2)?d2:(d2.data||[])).map(normalizePartsRow);
+
     populateFilters();
     document.getElementById('marketFilter').addEventListener('change',render);
     document.getElementById('periodFilter').addEventListener('change',render);
+
     render();
     hideLoading();
   }catch(err){
